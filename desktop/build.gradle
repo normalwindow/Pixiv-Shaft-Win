@@ -1,0 +1,86 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+    id 'org.jetbrains.compose'
+    id 'org.jetbrains.kotlin.plugin.compose'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+dependencies {
+    implementation project(':shared')
+    implementation compose.desktop.currentOs
+    implementation compose.material3
+    implementation compose.materialIconsExtended
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2'
+    implementation 'io.coil-kt.coil3:coil-compose:3.1.0'
+    implementation 'io.coil-kt.coil3:coil-network-okhttp:3.1.0'
+    testImplementation 'junit:junit:4.13.2'
+}
+
+compose.desktop {
+    application {
+        mainClass = 'ceui.pixshaft.desktop.MainKt'
+        // Groovy cannot see Kotlin Property `isEnabled` (JavaBean `is*` clash).
+        // Keep ProGuard on for release, but ignore OkHttp/Retrofit optional Android types.
+        buildTypes.release.proguard {
+            configurationFiles.from(project.file('proguard-rules.pro'))
+        }
+        nativeDistributions {
+            targetFormats(
+                    org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
+                    org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
+            )
+            packageName = 'PixShaft'
+            packageVersion = '0.1.0'
+            description = 'Unofficial Pixiv client for Windows (Pixiv-Shaft-Win)'
+            vendor = 'Pixiv-Shaft-Win'
+            copyright = 'GNU GPL v2. Copyright (C) Pixiv-Shaft contributors.'
+            licenseFile.set(rootProject.file('LICENSE'))
+            includeAllModules = false
+            modules('jdk.unsupported', 'jdk.unsupported.desktop')
+            windows {
+                menuGroup = 'PixShaft'
+                upgradeUuid = '8c2e1d4a-6b7f-4c91-9e3a-2f7b14d9a001'
+                shortcut = true
+                dirChooser = true
+                iconFile.set(project.file('icon.ico'))
+            }
+        }
+        jvmArgs.add('-Xmx1g')
+        jvmArgs.add('-Djava.protocol.handler.pkgs=ceui.pixshaft.desktop.protocol')
+    }
+}
+
+tasks.register('packageReleasePortableZip', Zip) {
+    dependsOn tasks.named('createReleaseDistributable')
+    group = 'compose desktop'
+    description = 'Zip the release app-image with a PixShaft.portable marker.'
+    archiveFileName = 'PixShaft-0.1.0-portable.zip'
+    destinationDirectory = layout.buildDirectory.dir('compose/binaries/main-release/zip')
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(layout.buildDirectory.dir('compose/binaries/main-release/app/PixShaft')) {
+        into 'PixShaft'
+    }
+    from {
+        def marker = layout.buildDirectory.file('tmp/PixShaft.portable').get().asFile
+        marker.parentFile.mkdirs()
+        marker.text = 'portable\n'
+        marker
+    } {
+        into 'PixShaft'
+    }
+}
+
+afterEvaluate {
+    tasks.matching { it.name == 'packageReleaseDistributionForCurrentOS' }.configureEach {
+        finalizedBy('packageReleasePortableZip')
+    }
+}

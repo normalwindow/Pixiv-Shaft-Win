@@ -14,6 +14,7 @@ import android.widget.CompoundButton;
 import androidx.appcompat.app.AppCompatActivity;
 
 import ceui.pixiv.witstudio.dialog.WitDialog;
+import ceui.pixiv.witstudio.dialog.WitDialogAction;
 
 import java.util.Arrays;
 import java.util.Locale;
@@ -116,16 +117,23 @@ public class FragmentSettingsAppearance extends SettingsPageFragment<FragmentSet
                     .show();
         });
 
-        // 列数
-        baseBind.lineCount.setText(getString(R.string.string_349, Shaft.sSettings.getLineCount()));
+        // 列数（0 = 自动，按窗格宽度 2–8 列）
+        int savedLineCount = Shaft.sSettings.getLineCount();
+        baseBind.lineCount.setText(savedLineCount == 0
+                ? getString(R.string.line_count_auto)
+                : getString(R.string.string_349, savedLineCount));
         baseBind.lineCountRela.setOnClickListener(v -> {
+            int current = Shaft.sSettings.getLineCount();
             int index = 0;
-            if (Shaft.sSettings.getLineCount() == 3) {
+            if (current == 2) {
                 index = 1;
-            } else if (Shaft.sSettings.getLineCount() == 4) {
+            } else if (current == 3) {
                 index = 2;
+            } else if (current == 4) {
+                index = 3;
             }
             String[] LINE_COUNT = new String[]{
+                    getString(R.string.line_count_auto),
                     getString(R.string.string_349, 2),
                     getString(R.string.string_349, 3),
                     getString(R.string.string_349, 4)
@@ -137,9 +145,11 @@ public class FragmentSettingsAppearance extends SettingsPageFragment<FragmentSet
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             if (which != selectIndex) {
-                                int lineCount = which + 2;
+                                int lineCount = which == 0 ? 0 : which + 1;
                                 Shaft.sSettings.setLineCount(lineCount);
-                                baseBind.lineCount.setText(getString(R.string.string_349, lineCount));
+                                baseBind.lineCount.setText(lineCount == 0
+                                        ? getString(R.string.line_count_auto)
+                                        : getString(R.string.string_349, lineCount));
                                 Local.setSettings(Shaft.sSettings);
                                 Common.showToast(getString(R.string.please_restart_app), 2);
                             }
@@ -339,6 +349,14 @@ public class FragmentSettingsAppearance extends SettingsPageFragment<FragmentSet
         });
         baseBind.tabletSplitScreenRela.setOnClickListener(
                 v -> baseBind.tabletSplitScreen.performClick());
+
+        baseBind.desktopShortcutsRela.setOnClickListener(v ->
+                new WitDialog.MessageDialogBuilder(mActivity)
+                        .setTitle(getString(R.string.desktop_shortcuts_title))
+                        .setMessage(getString(R.string.desktop_shortcuts_cheat_sheet))
+                        .addAction(0, getString(R.string.sure), WitDialogAction.ACTION_PROP_NEGATIVE,
+                                (dialog, index) -> dialog.dismiss())
+                        .show());
     }
 
     private boolean hasWidget(Class<?> providerClass) {

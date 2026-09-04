@@ -174,7 +174,7 @@ class MeFragment : Fragment(R.layout.fragment_me) {
 
     private fun buildGrid(inflater: LayoutInflater, entries: List<Entry>): GridLayout {
         val grid = GridLayout(requireContext())
-        grid.columnCount = 3
+        grid.columnCount = if (ceui.pixiv.ui.desktop.WindowWidth.isExpanded(requireContext())) 4 else 3
         val side = dp(8)
         grid.setPadding(side, 0, side, dp(8))
         grid.layoutParams = LinearLayout.LayoutParams(

@@ -11,6 +11,7 @@ import android.net.ConnectivityManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.TextUtils;
 import android.view.Gravity;
 
 import com.blankj.utilcode.util.BarUtils;
@@ -326,6 +327,12 @@ public class Shaft extends Application implements ServicesProvider {
         initMMKV(this);
         networkStateManager = new NetworkStateManager(this);
         sSettings = Local.getSettings();
+
+        if (TextUtils.isEmpty(sPreferences.getString(Local.SETTINGS, ""))
+                && getResources().getConfiguration().smallestScreenWidthDp >= 840) {
+            sSettings.setTabletSplitScreen(true);
+            Local.setSettings(sSettings);
+        }
 
         // issue #865: 图片加速代理。在 mOkHttpClient 构建前把持久化的模式/自定义 host
         // 灌进 ImageHostManager —— requiresStandardClient() 靠它决定是否给图片客户端

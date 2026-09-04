@@ -44,6 +44,9 @@ public class Settings {
 
     private int lineCount = 2;
 
+    /** 0 = pick columns from pane width. Existing users stay on 2/3/4. */
+    public static final int LINE_COUNT_AUTO = 0;
+
     private boolean useStaggeredLayout = true;
 
     /** 各 uid 在本设备最近一次已应用的 moonAPI 版本号。key 是 uid.toString()。 */

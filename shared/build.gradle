@@ -1,0 +1,23 @@
+plugins {
+    id 'org.jetbrains.kotlin.jvm'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+kotlin {
+    jvmToolchain(17)
+}
+
+dependencies {
+    api 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2'
+    api 'com.squareup.okhttp3:okhttp:4.12.0'
+    api 'com.squareup.retrofit2:retrofit:2.11.0'
+    api 'com.squareup.retrofit2:converter-gson:2.11.0'
+    api 'com.google.code.gson:gson:2.11.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'com.squareup.okhttp3:mockwebserver:4.12.0'
+}

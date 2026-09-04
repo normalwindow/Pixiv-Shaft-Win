@@ -1,0 +1,307 @@
+# Pixiv-Shaft-Win 完整计划
+
+更新：2026-09-04。工作分支只有 `classic`。上游是 [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft)，本仓是 [normalwindow/Pixiv-Shaft-Win](https://github.com/normalwindow/Pixiv-Shaft-Win)。许可证 GNU GPL v2。
+
+## 1. 目标
+
+把本 fork 做成 **双产品**：
+
+1. **Android**：尽量可贴合上游 `classic`，另加电脑 / 平板宽屏 UI（`w >= 840dp`）。
+2. **Windows**：Compose Multiplatform 原生客户端（x64，后续 ARM64），不是 WSA、不是套 APK、不是 WinUI 重写。
+
+功能路线是 **完整对等**（浏览、下载、小说/漫画、FANBOX、COMIC、聊天、以图搜图、本地书库、端侧 AI），分阶段交付。每一阶段都要能跑、能合并上游。
+
+用户拍板（2026-09-03）：
+
+- 交付形态：Compose Desktop `.exe` + Android 宽屏
+- 架构：Windows x64 + ARM64
+- 不要把 `:app` / `:models` 原地改成 KMP
+- 不要在第一个 exe 上移植 Cronet / ncnn
+
+## 2. 为什么是这个形状
+
+上游大约 14 个 Activity、210 个 Fragment、328 个 XML layout，没有 Compose，没有 `layout-sw*`。把 `:app` 原地改 KMP，每次 `git merge upstream/classic` 都会打成一团。
+
+正确做法：
+
+```
+upstream classic  --merge-->  this classic
+                                ├ app/ models/ feeds/ …     Android，只加很小的 hook
+                                ├ shared/                   新增 kotlin-jvm，永不进上游
+                                ├ desktop/                  新增 Compose Desktop
+                                ├ native-win/               以后：ncnn / HMAC 的 PE
+                                └ scripts/sync-upstream.*   新增
+```
+
+规则：从 `:app` **拷贝/抽出** JVM 安全逻辑到 `:shared`，不要改上游模块的形态。
+
+## 3. 硬约束（不要对着干）
+
+| 项 | 事实 |
+|---|---|
+| UI | View / XML / DataBinding。`TabletActivityEmbedding` 是两个 Activity 并排（`sw>=600` 且 `Settings.tabletSplitScreen`，默认 **关**） |
+| 列数 | `Settings.LINE_COUNT_AUTO = 0`；解析走 `ShaftColumns`。**不要**发明 `getResolvedLineCount`。**不要**把已有用户的 `lineCount` 改成 0 |
+| NDK | 生产只有 `arm64-v8a`。ncnn `.so` 是 ELF，用 `ProcessBuilder` 拉起。HMAC 在 `shaft_hmac.cpp` |
+| 网络 | Android 用 Cronet QUIC + 图片 No-SNI。Cronet-embedded / MMKV **没有** Windows 产物 |
+| 登录 | Android：Chrome Custom Tab + `SoxiaLiSA/pixiv-login`。Desktop：自己实现 PKCE |
+| 存储 | Android MediaStore / SAF。Desktop：`%APPDATA%\PixShaft` 或便携 `./data` |
+| 许可证 | GPL-2。exe / dll 必须带源码 |
+| JDK | 本机 `C:\Users\kk\.jdks\jdk-17.0.2`。**不要改** `gradle.properties` 里的 macOS installations.paths，用 `-D` 传 |
+
+## 4. 架构细则
+
+### 4.1 Android 宽屏（已落地）
+
+- 新资源目录 `layout-w840dp` + 小 hook，不替换 Activity Embedding。
+- 左 NavigationRail（与底栏同一套 tab），AE 仍然可以 list|detail。
+- 列数按 **当前窗格宽度**，不是 `widthPixels`。
+- 首次启动且 `smallestScreenWidthDp >= 840` 才写 `tabletSplitScreen = true`。已有用户不要翻。
+- 默认 `activity_cover.xml` **必须**带 `navigation_rail`（`visibility=gone`），否则 `ActivityCoverBinding` 丢字段。
+- 键盘：J/K 下一/上一、F 收藏、Ctrl+S 下载、Ctrl+F 搜索、Esc、1–5 切 tab。Esc 不要写成 `; true` 无条件吞掉。
+
+### 4.2 JVM 内核 `:shared`（已落地雏形）
+
+现在有：
+
+- PKCE / `PixivOAuth` / `DesktopOAuth`
+- OkHttp + Retrofit + Gson
+- PixivDns：DoH + Cloudflare 固定 IP（`app-api` / `oauth` / `www` / `accounts` / `comic` / `i.pximg.net`）
+- 图片 Referer `https://app-api.pixiv.net/`
+- 客户端身份：UA `PixivIOSApp/8.6.10 (iOS 26.5; iPhone16,2)`，clientId `MOBrBDS8blbauoSck0ZfDbtuzpyT`
+
+还没有（Phase 4+）：SQLDelight、下载队列、小说/漫画、FANBOX、websocket、HMAC DLL。
+
+### 4.3 Desktop `:desktop`（0.1.0 已能打包）
+
+- Compose MP 1.8.2 + Kotlin 2.1.20 + JDK 17
+- Coil 3.1.0
+- 窗口默认 1280×800，最小约 900×600
+- 包名概念 `com.pixshaft.win`；jpackage `packageName=PixShaft` `packageVersion=0.1.0`
+- Windows `upgradeUuid = 8c2e1d4a-6b7f-4c91-9e3a-2f7b14d9a001`
+- 图标：Android `ic_launcher.webp` → `desktop/icon.ico` + `desktop/src/main/resources/icon.png`
+- 数据目录：若 exe 旁有 `PixShaft.portable` → `./data`，否则 `%APPDATA%\PixShaft`
+- 登录：**独立 Chromium（优先本机 `D:\Sware\Edge`，再 msedge，再 chrome）+ Android Chrome UA + QUIC + host-resolver-rules**。先 `about:blank` 再 CDP `Page.navigate`。JavaFX WebView 在本机 DNS 污染下会一直「加载中」白屏；系统桌面 Chrome 配置文件会被 Pixiv `/auth/pixiv/start` 判「不正确的请求」（Client Hints）
+- 回调：`pixiv://` / `shaft://` / `https://app-api.pixiv.net/web/v1/users/auth/pixiv/callback?code=`
+- `accounts.pixiv.net/post-redirect?.../auth/pixiv/start` **没有 code**，不能当登录完成
+- 备用：粘贴 `refresh_token` 或带 `code=` 的回调
+
+OAuth 常量：
+
+- login `https://app-api.pixiv.net/web/v1/login`
+- token `https://oauth.secure.pixiv.net/auth/token`
+- redirect `https://app-api.pixiv.net/web/v1/users/auth/pixiv/callback`
+- client `pixiv-android`，PKCE S256，32 随机字节 URL-safe Base64，challenge = SHA-256(verifier 字节)
+
+## 5. 阶段
+
+### Phase 0 — 仓库卫生（完成）
+
+- [x] 只在 `classic` 工作
+- [x] `scripts/sync-upstream.ps1` + `docs/upstream-sync.md`
+- [x] `settings.gradle` **只追加** `:shared` / `:desktop`
+- [x] 根 `build.gradle` 追加 Compose 插件（`apply false`），不锁死上游 AGP/Kotlin
+- [x] README overlay：`docs/readme-win/` → `README.md` / `README/README.zh-CN.md` / `README/README.ja.md`
+- [x] 不提交 `local.properties`、WiX 二进制、`build/`
+
+### Phase 1 — Android 宽屏 A–Q（完成）
+
+- [x] `WindowWidth` / `DesktopChrome` / `ShaftColumns` / `DesktopShortcuts`
+- [x] `layout-w840dp/activity_cover.xml` NavigationRail
+- [x] `LINE_COUNT_AUTO`、外观设置「自动」、键盘说明
+- [x] `SpacesItemDecoration` 按 span 通算
+- [x] `assembleGithubDebug` 通过
+- [x] **没有**把 rail 放到非 `w840dp` 默认底栏
+- [x] **没有**翻转已有用户的 `tabletSplitScreen`
+
+### Phase 2 — Shared JVM 内核（雏形完成）
+
+- [x] `:shared` kotlin-jvm，OkHttp / Retrofit / Gson / coroutines
+- [x] PKCE + token 交换 + refresh
+- [x] PixivDns（DoH + Cloudflare pin）、图片 Referer
+- [x] `:shared:test`（`PkceTest` 等）
+- [ ] SQLDelight / 本地库
+- [ ] 下载队列与命名模板
+- [ ] 把 `progressmanager` 接到 desktop（它几乎零 Android，可后做）
+
+### Phase 3 — 第一个 `.exe`（基本完成，登录仍是当前焦点）
+
+已交付：
+
+- [x] `:desktop:run` / `:desktop:compileKotlin`
+- [x] MSI + Exe（Compose 1.8.2 **没有** `TargetFormat.Zip`）
+- [x] 自定义 Gradle `packageReleasePortableZip`（app-image + `PixShaft.portable`）
+- [x] WiX 3.11 走 NuGet，`$env:WIX_PATH=build\wix311\tools`
+- [x] ProGuard 保留；`desktop/proguard-rules.pro` `-dontwarn` Android/Conscrypt
+- [x] 窗口 / 安装包 Shaft 图标
+- [x] 单实例锁 `127.0.0.1:17831`；第二次启动把已有窗口拉到前台
+- [x] 协议注册改后台线程 + `ProcessBuilder("reg","add",...)`，不再写损坏的 `.cmd`
+- [x] 打包 JRE 补 `jdk.unsupported*`
+- [x] 崩溃写 `%APPDATA%\PixShaft\crash.log`
+- [x] 登录页：Chromium 登录（推荐）/ 粘贴 token
+
+当前卡点（必须先收口再进 Phase 4）：
+
+1. **内嵌 JavaFX WebView 白屏（已弃用，不再修 prefWidth）**  
+   根因不是 `prefWidth`。本机 `app-api.pixiv.net` A=Dropbox `162.125.1.8`、AAAA=Facebook，curl 到 Cloudflare 的 TCP/TLS 被 reset。JavaFX WebKit 走系统 DNS + TCP，永远停在「加载中」。Chrome/Edge 能通是因为 QUIC。登录改为独立 Chromium 窗口：Android UA（CDP override，不放命令行）、`--host-resolver-rules` 钉 `104.18.42.239`。**不要**在命令行塞登录 URL / `--disable-web-security`（Edge renderer 会在 `Network.enable` 前崩成 CDP `-32000 Target crashed`）。`--origin-to-force-quic-on=host:443` **必须留着**，否则登录页是 `ERR_CONNECTION_RESET`。正确顺序是 `about:blank` → CDP enable → `Page.navigate`；崩溃则重连 `/json/list` 新 page。CDP 拦截 `pixiv://` / `shaft://` / HTTPS callback。
+2. **OkHttp 也可能被 TCP reset**  
+   `PixivDns` 立刻返回 Cloudflare IP，后台试 DoH。token 交换若仍 IOException，走无头 Chromium `fetch()`（QUIC）回退。
+3. **系统浏览器登录不会完成**  
+   `post-redirect` / `/auth/pixiv/start` 没有 `code=`。必须拦截 `pixiv://` / `shaft://` / HTTPS callback，或粘贴 `refresh_token`。
+4. **关窗口后进程不退 / 再双击打不开**  
+   已修：`SingleInstance.release()`、ACK 握手、僵尸 PID 回收、关闭后 400ms `halt(0)`。Chromium 子进程在 `ChromiumHttp.shutdown()` / session close 时杀掉。
+5. **协议注册曾把 HKCU 写成** `PixShaft.exe " /f"`  
+   新代码用 ProcessBuilder 后台线程。装新包后启动一次会重写。
+6. **`packageReleaseExe` 可能因 `main-release/exe` 被占用失败**  
+   关干净进程后再打。临时可只打 MSI + zip。
+7. **验证必须用新 MSI/zip**，不要双击旧 `D:\Sware\PixShaft`。需要本机 Chrome 或 Edge。
+
+Phase 3 仍缺（第一个可用 exe 之后）：
+
+- [ ] 登录稳定（Chromium 窗口能出 Pixiv 页并换 token）
+- [ ] 推荐瀑布 / 排行 / 搜索 / 作品详情 / 用户页 的完整浏览（现在只有壳）
+- [ ] `pixiv://` / `https://www.pixiv.net/artworks/…` 深链
+- [ ] ARM64 包
+- [ ] GitHub Actions `desktop.yml`
+
+### Phase 4 — 下载、小说、漫画
+
+- 下载队列、暂停/续传、目标文件夹、文案导出、aria2 RPC
+- 小说阅读器：进度、混排插画、字体/夜间、本地 txt 书库（普通文件夹，不用 SAF）
+- 漫画：翻页、宽窗双页
+- 托盘 + 批量完成气泡；阅读时 `SetThreadExecutionState`
+
+### Phase 5 — FANBOX、COMIC、聊天、以图搜图
+
+- FANBOX cookie 桥：复用 Chromium / 以后再 spike WebView2 vs JCEF
+- pixiv COMIC
+- `:websocket` 桌面版（不要改 Android 模块的 `coroutines-android`）
+- 以图搜图：文件 / 剪贴板 → SauceNAO / TinEye / IQDB / Ascii2D
+- 静音、稍后再看、多账号（本地库 + UI）
+
+### Phase 6 — 端侧 AI（Windows PE）
+
+- ncnn 编成 x64 / ARM64 的 exe/dll（rife / realesrgan / realcugan / rembg），Vulkan/CPU 回退
+- 不要动 Android `.so`
+- ONNX Runtime JVM 做漫画 OCR / 翻译
+- ARM64 若某后端编不出：禁用按钮，不要崩
+
+### Phase 7 — 包装、更新、README
+
+- MSI（可选目录）+ Exe 安装器 + 便携 zip（已有雏形）
+- 有证书再签；没有就 README 写 SmartScreen
+- GitHub Releases 更新器（对应 Android github flavor 的 `AppUpdateChecker`）
+- README overlay 保持 fork 身份、构建命令、同步上游、GPL-2、非官方
+- FAQ：Win10 1809+ / Win11；x64 + ARM64；杀毒误报；数据目录；便携模式；同一棵树仍出 Android APK
+
+## 6. 构建与打包（本机已验证的写法）
+
+```powershell
+$env:JAVA_HOME = "C:\Users\kk\.jdks\jdk-17.0.2"
+$env:PATH = "$env:JAVA_HOME\bin;" + $env:PATH
+$env:WIX_PATH = "D:\STRARG\GHCode\Pixiv-Shaft-Win\build\wix311\tools"
+
+.\gradlew.bat assembleGithubDebug `
+  "-Dorg.gradle.java.installations.paths=C:\Users\kk\.jdks\jdk-17.0.2" `
+  "-Dorg.gradle.java.installations.auto-download=false"
+
+.\gradlew.bat :shared:test :desktop:compileKotlin `
+  "-Dorg.gradle.java.installations.paths=C:\Users\kk\.jdks\jdk-17.0.2" `
+  "-Dorg.gradle.java.installations.auto-download=false"
+
+.\gradlew.bat :desktop:packageReleaseDistributionForCurrentOS `
+  "-Dorg.gradle.java.installations.paths=C:\Users\kk\.jdks\jdk-17.0.2" `
+  "-Dorg.gradle.java.installations.auto-download=false"
+```
+
+产物：
+
+- `desktop/build/compose/binaries/main-release/exe/PixShaft-0.1.0.exe`
+- `desktop/build/compose/binaries/main-release/msi/PixShaft-0.1.0.msi`
+- `desktop/build/compose/binaries/main-release/zip/PixShaft-0.1.0-portable.zip`
+- app-image：`desktop/build/compose/binaries/main-release/app/PixShaft/`
+
+WiX：Gradle 从 GitHub 下经常 SSL 失败。**不要** `Invoke-WebRequest`（会截断 zip）。用 NuGet `WiX/3.11.2`，解压 `tools/`，设 `WIX_PATH`。  
+`-Pcompose.desktop.application.downloadWix=false` 且没有 `WIX_PATH` 时，连 app-image 也会因为 `wixToolsetDir` 空值失败。
+
+Groovy **不能**写 `buildTypes.release.proguard.isEnabled`（Kotlin `is*` JavaBean 冲突）。ProGuard 保持开，靠 `desktop/proguard-rules.pro`。
+
+`jvmArgs.add('-Xmx1g')`，不要 `+=`。Compose 1.8.2 没有 `TargetFormat.Zip`。
+
+同步上游：
+
+```powershell
+pwsh -File scripts/sync-upstream.ps1
+Copy-Item docs/readme-win/README.md README.md -Force
+Copy-Item docs/readme-win/README.zh-CN.md README/README.zh-CN.md -Force
+Copy-Item docs/readme-win/README.ja.md README/README.ja.md -Force
+```
+
+冲突热点见 [docs/upstream-sync.md](./upstream-sync.md)。
+
+## 7. 明确不要做
+
+- 不要把 `:app` / `:models` / `:feeds` 原地改成 KMP
+- 不要在 0.1.x 登录稳定前开始 ncnn / Cronet / 内嵌 WebView2
+- 不要给已有用户把 `tabletSplitScreen` 改 true
+- 不要用 `widthPixels` 当分栏后的窗格宽度
+- 不要发明 `getResolvedLineCount`
+- 不要把 rail 只做在默认（非 w840dp）layout
+- 不要改 `gradle.properties` 的 macOS JDK paths
+- 不要提交 `local.properties`、WiX、`build/`
+- 不要用 Play 的 `ceui.pixiv.pshaft` 当 Windows applicationId
+- 不要 32-bit x86
+- 不要把 CI 门禁绑到 `CeuiLiSA/Pixiv-Shaft` 仓库变量
+- 同一时间不要开第二个 Gradle 打包
+
+## 8. 验证清单
+
+1. 手机 `sw < 600`：和上游观感一致；未开平板双栏时不装 AE organizer
+2. 平板 / `w1280dp`：rail、自动列、作品信息在图右侧、快捷键
+3. `assembleGithubDebug` 出 APK
+4. `:shared:test` + `:desktop:compileKotlin`
+5. 安装新 MSI 到干净目录（不要用旧 `D:\Sware\PixShaft` 验证）
+6. 任务管理器没有残留 `PixShaft.exe` 后再双击；第二次双击应前置窗口
+7. 「在应用内登录」能出 Pixiv 页；成功后有 session；`crash.log` 不再出现 `prefWidth`
+8. 系统浏览器走到 `post-redirect` 时，UI 要说明「这是中间页，没有 code」
+9. 便携 zip：exe 旁有 `PixShaft.portable`，数据在 `./data`
+10. dummy `git merge upstream/classic` 后，冲突只在文档里的热点；`:desktop:compileKotlin` 仍过
+
+## 9. 执行顺序（给后续 agent）
+
+1. **立刻**：打新 MSI + zip（源码已修 WebView / 单实例 / 退出）；用户先杀干净 `PixShaft.exe` 再装新包验证登录。不要用旧安装目录验证。
+2. 登录稳定后：补推荐瀑布 / 详情 / 搜索，让 0.1.x 能真正逛。
+3. 再做下载 / 小说 / 漫画（Phase 4）。
+4. FANBOX 先 spike WebView2/JCEF，再写（Phase 5）。
+5. ncnn Windows 构建放最后（Phase 6）。
+6. 全程保持 additive，方便 `sync-upstream.ps1`。
+
+## 10. 关键文件
+
+Android 宽屏（已有，合并时保留）：
+
+- `app/src/main/java/ceui/pixiv/ui/desktop/WindowWidth.kt`
+- `app/src/main/java/ceui/pixiv/ui/desktop/ShaftColumns.kt`
+- `app/src/main/java/ceui/pixiv/ui/desktop/DesktopChrome.kt`
+- `app/src/main/java/ceui/pixiv/ui/desktop/DesktopShortcuts.kt`
+- `app/src/main/res/layout-w840dp/activity_cover.xml`
+- `app/src/main/java/ceui/lisa/utils/Settings.java`（`LINE_COUNT_AUTO`）
+- `app/src/main/java/ceui/lisa/activities/Shaft.java` / `MainActivity.java`
+
+Desktop 0.1.0：
+
+- `shared/src/main/kotlin/ceui/pixshaft/shared/auth/OAuth.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/Main.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/AppGraph.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/Protocol.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/SingleInstance.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/Paths.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/ui/LoginScreen.kt`
+- `desktop/src/main/kotlin/ceui/pixshaft/desktop/ui/LoginWebView.kt` ← 当前白屏根因
+- `desktop/build.gradle` / `desktop/proguard-rules.pro` / `desktop/icon.ico`
+
+文档：
+
+- 本文件 `docs/plan.md`
+- `docs/upstream-sync.md`
+- `docs/readme-win/`
+- `docs/direct-connect.md` / `docs/image-host.md` / `docs/feeds-module.md` / `docs/action-queue.md`

@@ -134,6 +134,10 @@
     <string name="v3_widget_hide_refresh_button_desc">После скрытия иллюстрация меняется только по интервалу обновления</string>
     <string name="tablet_split_screen">Двухпанельный режим на планшете</string>
     <string name="tablet_split_screen_desc">Показывать список и подробности рядом на планшетах и других больших экранах. Только для планшетов; после изменения перезапустите приложение</string>
+    <string name="line_count_auto">Авто</string>
+    <string name="desktop_shortcuts_title">Сочетания клавиш</string>
+    <string name="desktop_shortcuts_desc">Сочетания для компьютера или внешней клавиатуры</string>
+    <string name="desktop_shortcuts_cheat_sheet">J / K следующая / предыдущая работа\nF в закладки текущую работу\nCtrl+S скачать текущую работу\nCtrl+F поиск\nEsc закрыть боковую панель или назад\n1–5 вкладки главной</string>
     <string name="novel_tag">Теги новелл</string>
     <string name="hot_tag">Популярные теги</string>
     <string name="ranking_illust">Популярное</string>

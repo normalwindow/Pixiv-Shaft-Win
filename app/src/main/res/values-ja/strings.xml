@@ -134,6 +134,10 @@
     <string name="v3_widget_hide_refresh_button_desc">隠すと更新間隔にしたがって自動で切り替わるだけになります</string>
     <string name="tablet_split_screen">タブレットの2画面レイアウト</string>
     <string name="tablet_split_screen_desc">タブレットなどの大画面で一覧と詳細を左右に並べて表示します。タブレットのみ有効で、変更後はアプリの再起動が必要です</string>
+    <string name="line_count_auto">自動</string>
+    <string name="desktop_shortcuts_title">キーボードショートカット</string>
+    <string name="desktop_shortcuts_desc">パソコンや外付けキーボードで使えるショートカット一覧</string>
+    <string name="desktop_shortcuts_cheat_sheet">J / K 次 / 前の作品\nF 現在の作品をブックマーク\nCtrl+S 現在の作品をダウンロード\nCtrl+F 検索\nEsc サイドバーを閉じる / 戻る\n1–5 ホームのタブ切替</string>
     <string name="novel_tag">小説のタグ</string>
     <string name="hot_tag">人気のタグ</string>
     <string name="ranking_illust">ランキング</string>

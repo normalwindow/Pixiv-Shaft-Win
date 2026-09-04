@@ -134,6 +134,10 @@
     <string name="v3_widget_hide_refresh_button_desc">Gizlendiğinde eser yalnızca yenileme aralığında değişir</string>
     <string name="tablet_split_screen">Tablette iki bölmeli düzen</string>
     <string name="tablet_split_screen_desc">Tablet gibi büyük ekranlarda listeyi ve ayrıntıları yan yana gösterir. Yalnızca tablette geçerlidir; değiştirdikten sonra uygulamayı yeniden başlatın</string>
+    <string name="line_count_auto">Otomatik</string>
+    <string name="desktop_shortcuts_title">Klavye kısayolları</string>
+    <string name="desktop_shortcuts_desc">Bilgisayar veya harici klavyede kullanılabilen kısayollar</string>
+    <string name="desktop_shortcuts_cheat_sheet">J / K sonraki / önceki eser\nF geçerli eseri yer imlerine ekle\nCtrl+S geçerli eseri indir\nCtrl+F ara\nEsc çekmeceyi kapat veya geri dön\n1–5 ana sayfa sekmeleri</string>
     <string name="novel_tag">Roman Etiketleri</string>
     <string name="hot_tag">Popüler Etiketler</string>
     <string name="ranking_illust">Popüler</string>

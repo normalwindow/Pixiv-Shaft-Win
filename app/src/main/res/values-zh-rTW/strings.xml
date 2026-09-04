@@ -134,6 +134,10 @@
     <string name="v3_widget_hide_refresh_button_desc">隱藏後只按換圖間隔自動換圖</string>
     <string name="tablet_split_screen">平板雙欄版面</string>
     <string name="tablet_split_screen_desc">在平板等大螢幕裝置上左右分欄顯示清單與詳情，僅平板生效，切換後需重新啟動應用程式</string>
+    <string name="line_count_auto">自動</string>
+    <string name="desktop_shortcuts_title">鍵盤快捷鍵</string>
+    <string name="desktop_shortcuts_desc">電腦或外接鍵盤可用的快捷鍵一覽</string>
+    <string name="desktop_shortcuts_cheat_sheet">J / K 下一張 / 上一張\nF 收藏目前作品\nCtrl+S 下載目前作品\nCtrl+F 搜尋\nEsc 關閉側邊欄或返回\n1–5 切換首頁標籤</string>
     <string name="novel_tag">小說標籤</string>
     <string name="hot_tag">熱門標籤</string>
     <string name="ranking_illust">排行榜</string>

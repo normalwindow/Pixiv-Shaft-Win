@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
 import android.text.TextUtils;
+import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -42,7 +43,7 @@ import androidx.viewpager.widget.ViewPager;
 
 import com.blankj.utilcode.util.BarUtils;
 import com.bumptech.glide.Glide;
-import com.google.android.material.bottomnavigation.BottomNavigationView;
+import com.google.android.material.navigation.NavigationBarView;
 import ceui.pixiv.witstudio.dialog.WitDialog;
 import ceui.pixiv.witstudio.dialog.WitDialogAction;
 
@@ -70,6 +71,8 @@ import ceui.pixiv.services.ServicesProvider;
 import ceui.pixiv.config.RemoteAppConfig;
 import ceui.pixiv.push.InAppPushCenter;
 import ceui.pixiv.session.SessionManager;
+import ceui.pixiv.ui.desktop.DesktopChrome;
+import ceui.pixiv.ui.desktop.DesktopShortcuts;
 import ceui.pixiv.ui.navigation.BottomBarAutoHide;
 import ceui.pixiv.ui.navigation.DrawerIconCatalog;
 import ceui.pixiv.ui.navigation.TemplateRoute;
@@ -197,51 +200,49 @@ public class MainActivity extends BaseActivity<ActivityCoverBinding> implements 
                 return true;
             }
         });
-        baseBind.navigationView.setOnNavigationItemSelectedListener(new BottomNavigationView.OnNavigationItemSelectedListener() {
-            @Override
-            public boolean onNavigationItemSelected(@NonNull MenuItem item) {
-                if (tabMenuIds == null) {
-                    return false;
-                }
-                for (int i = 0; i < tabMenuIds.length; i++) {
-                    if (tabMenuIds[i] == item.getItemId()) {
-                        baseBind.viewPager.setCurrentItem(i);
-                        return true;
-                    }
-                }
+        NavigationBarView.OnItemSelectedListener tabSelectListener = item -> {
+            if (tabMenuIds == null) {
                 return false;
             }
-        });
-        baseBind.navigationView.setOnNavigationItemReselectedListener(new BottomNavigationView.OnNavigationItemReselectedListener() {
-            @Override
-            public void onNavigationItemReselected(@NonNull MenuItem item) {
-                if (item.getItemId() == R.id.action_1) {
-                    for (Fragment baseFragment : baseFragments) {
-                        if (baseFragment instanceof FragmentLeft) {
-                            ((FragmentLeft) baseFragment).forceRefresh();
-                        }
+            for (int i = 0; i < tabMenuIds.length; i++) {
+                if (tabMenuIds[i] == item.getItemId()) {
+                    baseBind.viewPager.setCurrentItem(i);
+                    return true;
+                }
+            }
+            return false;
+        };
+        NavigationBarView.OnItemReselectedListener tabReselectListener = item -> {
+            if (item.getItemId() == R.id.action_1) {
+                for (Fragment baseFragment : baseFragments) {
+                    if (baseFragment instanceof FragmentLeft) {
+                        ((FragmentLeft) baseFragment).forceRefresh();
                     }
-                } else if (item.getItemId() == R.id.action_2) {
-                    for (Fragment baseFragment : baseFragments) {
-                        if (baseFragment instanceof FragmentCenter) {
-                            ((FragmentCenter) baseFragment).forceRefresh();
-                        }
+                }
+            } else if (item.getItemId() == R.id.action_2) {
+                for (Fragment baseFragment : baseFragments) {
+                    if (baseFragment instanceof FragmentCenter) {
+                        ((FragmentCenter) baseFragment).forceRefresh();
                     }
-                } else if (item.getItemId() == R.id.action_3) {
-                    for (Fragment baseFragment : baseFragments) {
-                        if (baseFragment instanceof FragmentRight) {
-                            ((FragmentRight) baseFragment).forceRefresh();
-                        }
+                }
+            } else if (item.getItemId() == R.id.action_3) {
+                for (Fragment baseFragment : baseFragments) {
+                    if (baseFragment instanceof FragmentRight) {
+                        ((FragmentRight) baseFragment).forceRefresh();
                     }
-                } else if (item.getItemId() == R.id.action_4) {
-                    for (Fragment baseFragment : baseFragments) {
-                        if (baseFragment instanceof FragmentViewPager) {
-                            ((FragmentViewPager) baseFragment).forceRefresh();
-                        }
+                }
+            } else if (item.getItemId() == R.id.action_4) {
+                for (Fragment baseFragment : baseFragments) {
+                    if (baseFragment instanceof FragmentViewPager) {
+                        ((FragmentViewPager) baseFragment).forceRefresh();
                     }
                 }
             }
-        });
+        };
+        baseBind.navigationView.setOnItemSelectedListener(tabSelectListener);
+        baseBind.navigationView.setOnItemReselectedListener(tabReselectListener);
+        baseBind.navigationRail.setOnItemSelectedListener(tabSelectListener);
+        baseBind.navigationRail.setOnItemReselectedListener(tabReselectListener);
         baseBind.viewPager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
@@ -251,10 +252,14 @@ public class MainActivity extends BaseActivity<ActivityCoverBinding> implements 
             @Override
             public void onPageSelected(int position) {
                 if (tabMenuIds != null && position < tabMenuIds.length) {
-                    baseBind.navigationView.setSelectedItemId(tabMenuIds[position]);
+                    int itemId = tabMenuIds[position];
+                    baseBind.navigationView.setSelectedItemId(itemId);
+                    baseBind.navigationRail.setSelectedItemId(itemId);
                 }
                 // 换 tab 必须把底栏放回来:收起状态下滑到别的 tab,否则没底栏可点。
-                bottomBarAutoHide.reveal();
+                if (bottomBarAutoHide != null) {
+                    bottomBarAutoHide.reveal();
+                }
             }
 
             @Override
@@ -343,9 +348,12 @@ public class MainActivity extends BaseActivity<ActivityCoverBinding> implements 
      * 收起 / 恢复的触发见 {@link BottomBarAutoHide}(不能靠 CoordinatorLayout 的嵌套滚动分发)。
      */
     private void setUpAutoHidingBottomBar() {
+        final boolean railVisible = DesktopChrome.isRailVisible(baseBind.navigationRail);
         ViewCompat.setOnApplyWindowInsetsListener(baseBind.contentHost, (v, windowInsets) -> {
             Insets navBars = windowInsets.getInsets(WindowInsetsCompat.Type.navigationBars());
-            int bottom = Math.max(navBars.bottom, baseBind.navigationView.getHeight());
+            int bottom = railVisible
+                    ? navBars.bottom
+                    : Math.max(navBars.bottom, baseBind.navigationView.getHeight());
             return new WindowInsetsCompat.Builder(windowInsets)
                     .setInsets(WindowInsetsCompat.Type.navigationBars(),
                             Insets.of(navBars.left, navBars.top, navBars.right, bottom))
@@ -358,8 +366,12 @@ public class MainActivity extends BaseActivity<ActivityCoverBinding> implements 
                     }
                 });
 
-        bottomBarAutoHide = new BottomBarAutoHide(baseBind.navigationView);
-        bottomBarAutoHide.install(this);
+        if (railVisible) {
+            bottomBarAutoHide = null;
+        } else {
+            bottomBarAutoHide = new BottomBarAutoHide(baseBind.navigationView);
+            bottomBarAutoHide.install(this);
+        }
     }
 
     private void initFragment() {
@@ -398,6 +410,13 @@ public class MainActivity extends BaseActivity<ActivityCoverBinding> implements 
             baseFragments[position] = new MeFragment();
             tabMenuIds[position] = R.id.action_5;
             menu.add(Menu.NONE, R.id.action_5, Menu.NONE, R.string.me_tab).setIcon(R.drawable.ic_me);
+        }
+        Menu railMenu = baseBind.navigationRail.getMenu();
+        railMenu.clear();
+        for (int i = 0; i < menu.size(); i++) {
+            MenuItem item = menu.getItem(i);
+            railMenu.add(item.getGroupId(), item.getItemId(), item.getOrder(), item.getTitle())
+                    .setIcon(item.getIcon());
         }
         baseBind.viewPager.setAdapter(new FragmentPagerAdapter(getSupportFragmentManager()) {
             @Override
@@ -629,6 +648,32 @@ public class MainActivity extends BaseActivity<ActivityCoverBinding> implements 
 
     public DrawerLayout getDrawer() {
         return baseBind.drawerLayout;
+    }
+
+    public boolean closeDrawerIfOpen() {
+        if (isDrawerOpen()) {
+            baseBind.drawerLayout.closeDrawer(GravityCompat.START);
+            return true;
+        }
+        return false;
+    }
+
+    public void selectTab(int index) {
+        if (baseBind.viewPager != null && tabMenuIds != null && index >= 0 && index < tabMenuIds.length) {
+            baseBind.viewPager.setCurrentItem(index);
+        }
+    }
+
+    public void openSearch() {
+        Intent intent = new Intent(this, TemplateActivity.class);
+        intent.putExtra(TemplateActivity.EXTRA_FRAGMENT, TemplateRoute.SEARCH.key);
+        startActivity(intent);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (DesktopShortcuts.handle(this, event)) return true;
+        return super.dispatchKeyEvent(event);
     }
 
     /**

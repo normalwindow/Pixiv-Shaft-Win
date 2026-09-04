@@ -134,6 +134,10 @@
     <string name="v3_widget_hide_refresh_button_desc">숨기면 새로고침 간격에 따라 자동으로만 바뀝니다</string>
     <string name="tablet_split_screen">태블릿 2단 레이아웃</string>
     <string name="tablet_split_screen_desc">태블릿 등 큰 화면에서 목록과 상세를 좌우로 나눠 표시합니다. 태블릿에서만 적용되며 변경 후 앱을 다시 시작해야 합니다</string>
+    <string name="line_count_auto">자동</string>
+    <string name="desktop_shortcuts_title">키보드 단축키</string>
+    <string name="desktop_shortcuts_desc">컴퓨터나 외장 키보드에서 쓸 수 있는 단축키 목록</string>
+    <string name="desktop_shortcuts_cheat_sheet">J / K 다음 / 이전 작품\nF 현재 작품 북마크\nCtrl+S 현재 작품 다운로드\nCtrl+F 검색\nEsc 서랍 닫기 또는 뒤로\n1–5 홈 탭 전환</string>
     <string name="novel_tag">소설 꼬리표</string>
     <string name="hot_tag">인기 태그</string>
     <string name="ranking_illust">순위표</string>

@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<layout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <data>
+
+    </data>
+
+    <androidx.drawerlayout.widget.DrawerLayout
+        android:id="@+id/drawer_layout"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        tools:openDrawer="start">
+
+        <!-- 宽屏：NavigationRail 与内容区并排。默认 GONE（手机仍用底栏），layout-w840dp
+             再把它打开——id 必须留在默认 layout 里，否则 ActivityCoverBinding 没有 navigationRail。 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <com.google.android.material.navigationrail.NavigationRailView
+                android:id="@+id/navigation_rail"
+                android:layout_width="72dp"
+                android:layout_height="match_parent"
+                android:background="?android:attr/windowBackground"
+                android:visibility="visible"
+                app:labelVisibilityMode="unlabeled"
+                app:menuGravity="center" />
+
+        <!-- 底栏「跟随列表滚动收起」：内容页铺满整屏、底栏浮在其上，收起时露出的是列表本身
+             而不是一条空白（以前 view_pager 是 layout_above 底栏，底栏一挪就会露出窗口底色）。
+             被底栏压住的那一截由 MainActivity 把底栏高度当成底部安全区重新分发 inset，
+             各列表据此补 paddingBottom；滑动的触发见 BottomBarAutoHide。 -->
+        <androidx.coordinatorlayout.widget.CoordinatorLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
+
+            <!-- 这层壳只为「重写往内容区分发的底部 inset」留一个挂点(见 MainActivity
+                 setUpAutoHidingBottomBar):不能直接把 listener 挂到 view_pager 上——
+                 ViewPager 在构造函数里给自己装了一个 OnApplyWindowInsetsListener,
+                 用来把同一份 inset 分别发给每一页(而不是走 ViewGroup 那套「第一页消费完
+                 后面的页就收不到」的链式分发),挂上去会把它顶掉。 -->
+            <FrameLayout
+                android:id="@+id/content_host"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ceui.lisa.view.DrawerLayoutViewPager
+                    android:id="@+id/view_pager"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                </ceui.lisa.view.DrawerLayoutViewPager>
+
+            </FrameLayout>
+
+            <com.google.android.material.bottomnavigation.BottomNavigationView
+                android:id="@+id/navigation_view"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom"
+                android:background="?android:attr/windowBackground"
+                android:visibility="gone"
+                app:layout_behavior="com.google.android.material.behavior.HideViewOnScrollBehavior">
+
+            </com.google.android.material.bottomnavigation.BottomNavigationView>
+
+        </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+        </LinearLayout>
+
+        <!-- 侧边栏：MD3 modal navigation drawer（替代 NavigationView+menu）。
+             容器右缘 28dp 圆角（代码里 setClipToOutline），条目为透明底胶囊行，
+             分组行按可见性在 MainActivity.buildDrawerMenu 里动态生成；
+             顶部 status bar / 底部 nav bar padding 运行时用 BarUtils 补。 -->
+        <LinearLayout
+            android:id="@+id/nav_view"
+            android:layout_width="304dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:background="@drawable/bg_drawer_sheet"
+            android:clickable="true"
+            android:orientation="vertical">
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:overScrollMode="never"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/drawer_content"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp">
+
+                    <!-- 账号区：整块点开自己主页；头像长按沿用 R-18 临时过滤开关 -->
+                    <RelativeLayout
+                        android:id="@+id/drawer_header"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_drawer_item_pill"
+                        android:clickable="true"
+                        android:paddingStart="16dp"
+                        android:paddingTop="14dp"
+                        android:paddingEnd="16dp"
+                        android:paddingBottom="14dp">
+
+                        <de.hdodenhof.circleimageview.CircleImageView
+                            android:id="@+id/user_head"
+                            android:layout_width="56dp"
+                            android:layout_height="56dp"
+                            android:layout_centerVertical="true"
+                            android:contentDescription="@string/nav_header_desc"
+                            android:src="@drawable/no_profile"
+                            app:civ_border_color="?attr/colorPrimary"
+                            app:civ_border_width="1.5dp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_centerVertical="true"
+                            android:layout_marginStart="14dp"
+                            android:layout_marginEnd="8dp"
+                            android:layout_toStartOf="@+id/drawer_switch_account"
+                            android:layout_toEndOf="@id/user_head"
+                            android:orientation="vertical">
+
+                            <!--
+                                用户名 + 订阅徽章同排。名字用 0dp+weight 而不是 wrap_content：
+                                长名字要让给徽章收缩，而不是把徽章挤出可视区 —— 徽章才是这行
+                                新增的信息，名字截断了还有头像和邮箱在旁边认人。
+                            -->
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="center_vertical"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/user_name"
+                                    style="@style/textMontserratSemiBold"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:ellipsize="end"
+                                    android:maxLines="1"
+                                    android:textColor="@color/v3_text_1"
+                                    android:textSize="19sp"
+                                    android:textStyle="bold" />
+
+                                <!--
+                                    订阅档位。免费/未登录/拉不到配置一律 gone —— 没订阅的人
+                                    侧边栏应该和以前一模一样，不该多出一块空白或一个「免费」。
+                                    描边药丸复用 badge_current，它吃 ?attr/colorPrimary，
+                                    十档预设主题和自定义 HEX 都自动跟随。
+                                -->
+                                <TextView
+                                    android:id="@+id/user_plan_badge"
+                                    style="@style/textMontserratBold"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:layout_marginStart="8dp"
+                                    android:background="@drawable/badge_current"
+                                    android:paddingStart="7dp"
+                                    android:paddingTop="1dp"
+                                    android:paddingEnd="7dp"
+                                    android:paddingBottom="2dp"
+                                    android:textColor="?attr/colorPrimary"
+                                    android:textSize="10sp"
+                                    android:visibility="gone"
+                                    tools:text="MAX"
+                                    tools:visibility="visible" />
+                            </LinearLayout>
+
+                            <TextView
+                                android:id="@+id/user_email"
+                                style="@style/textMontserratMedium"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="1dp"
+                                android:ellipsize="end"
+                                android:maxLines="1"
+                                android:text="@string/nav_header_subtitle"
+                                android:textColor="@color/v3_text_2"
+                                android:textSize="12sp" />
+
+                        </LinearLayout>
+
+                        <!--
+                            账号切换快捷入口。以前这里是个纯装饰的「>」，只是提示整块可点；
+                            换成真按钮直达账号管理页，点它不再经过 drawer_header 的主页跳转。
+                            图标复用账号操作面板「切换到这个账号」的 swap_horiz，颜色跟抽屉
+                            其他行图标一样走 v3_text_2，不抢主题色。
+                        -->
+                        <ImageButton
+                            android:id="@+id/drawer_switch_account"
+                            android:layout_width="40dp"
+                            android:layout_height="40dp"
+                            android:layout_alignParentEnd="true"
+                            android:layout_centerVertical="true"
+                            android:layout_marginEnd="-8dp"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:contentDescription="@string/drawer_switch_account"
+                            android:scaleType="centerInside"
+                            android:src="@drawable/ic_v3_swap_account_24"
+                            app:tint="@color/v3_text_2" />
+
+                    </RelativeLayout>
+
+                    <LinearLayout
+                        android:id="@+id/drawer_sections"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+
+                </LinearLayout>
+
+            </ScrollView>
+
+        </LinearLayout>
+
+    </androidx.drawerlayout.widget.DrawerLayout>
+</layout>
+

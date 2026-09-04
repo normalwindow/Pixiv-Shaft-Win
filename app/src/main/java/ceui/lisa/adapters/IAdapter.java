@@ -29,6 +29,7 @@ import java.util.Locale;
 
 import ceui.lisa.R;
 import ceui.lisa.activities.Shaft;
+import ceui.pixiv.ui.desktop.ShaftColumns;
 import ceui.lisa.activities.TemplateActivity;
 import ceui.pixiv.ui.bookmark.SelectTagBottomSheet;
 import ceui.lisa.activities.VActivity;
@@ -93,7 +94,10 @@ public class IAdapter extends BaseAdapter<Illust, RecyIllustStaggerBinding> impl
         if (listWidth <= 0) {
             listWidth = mContext.getResources().getDisplayMetrics().widthPixels;
         }
-        return Math.max(1, listWidth / Shaft.sSettings.getLineCount());
+        int spanCount = attachedRecyclerView != null
+                ? ShaftColumns.resolvedFromList(attachedRecyclerView)
+                : ShaftColumns.resolvedFromContext(mContext);
+        return Math.max(1, listWidth / spanCount);
     }
 
     @Override

@@ -11,6 +11,7 @@ import androidx.recyclerview.widget.StaggeredGridLayoutManager
 import androidx.viewbinding.ViewBinding
 import ceui.lisa.R
 import ceui.lisa.activities.Shaft
+import ceui.pixiv.ui.desktop.ShaftColumns
 import ceui.lisa.activities.VActivity
 import ceui.lisa.core.Container
 import ceui.lisa.core.PageData
@@ -85,7 +86,7 @@ abstract class IllustFeedFragment(
         get() {
             val listWidth = feedBinding.feedListView.layoutManager?.width?.takeIf { it > 0 }
                 ?: resources.displayMetrics.widthPixels
-            return (listWidth / Shaft.sSettings.lineCount).coerceAtLeast(1)
+            return (listWidth / ShaftColumns.resolvedFromList(feedBinding.feedListView)).coerceAtLeast(1)
         }
 
     /**
@@ -142,7 +143,7 @@ abstract class IllustFeedFragment(
 
     override fun onCreateLayoutManager(): RecyclerView.LayoutManager {
         return StaggeredManager(
-            Shaft.sSettings.lineCount,
+            ShaftColumns.resolvedFromContext(requireContext()),
             RecyclerView.VERTICAL,
         ).apply {
             // GAP_HANDLING_NONE 对齐 legacy / Recmd / Artwork：SGLM 默认 gap 策略在刷新换代时
@@ -155,6 +156,7 @@ abstract class IllustFeedFragment(
     override fun onListReady(listView: RecyclerView) {
         // recy_illust_stagger 卡片自身无 margin，间距对齐 legacy staggerRecyclerView
         listView.addItemDecoration(SpacesItemDecoration(DensityUtil.dp2px(8.0f)))
+        ShaftColumns.applyTo(listView)
     }
 
     /** 默认就是标准瀑布流插画卡；需要混排其他条目类型的子类自行覆盖再拼上。 */

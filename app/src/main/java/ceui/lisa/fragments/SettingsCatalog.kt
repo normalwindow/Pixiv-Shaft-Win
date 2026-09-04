@@ -98,7 +98,8 @@ object SettingsCatalog {
         add(Entry(APPEARANCE, "main_view_r18_rela", R.string.string_359, keywords = "r18 r页 主页 首页 涩图"))
         // 别名按整串子串匹配（同上），「平板双栏」「左右分屏」这类连写说法各铺一遍
         add(Entry(APPEARANCE, "tablet_split_screen_rela", R.string.tablet_split_screen, R.string.tablet_split_screen_desc, keywords = "平板 双栏 平板双栏 分栏 分屏 左右分屏 左右分离 大屏 宽屏 折叠屏 两栏 并排 tablet split screen two pane dual pane large screen foldable embedding"))
-        add(Entry(APPEARANCE, "line_count_rela", R.string.string_336, keywords = "列数 几列 瀑布流 网格 columns grid"))
+        add(Entry(APPEARANCE, "desktop_shortcuts_rela", R.string.desktop_shortcuts_title, R.string.desktop_shortcuts_desc, keywords = "快捷键 键盘 热键 shortcut keyboard hotkey j k ctrl"))
+        add(Entry(APPEARANCE, "line_count_rela", R.string.string_336, keywords = "列数 几列 瀑布流 网格 columns grid auto 自动"))
         add(Entry(APPEARANCE, "layout_mode_rela", R.string.layout_mode, keywords = "瀑布流 线性 列表 关注动态 staggered linear"))
         add(Entry(APPEARANCE, "show_novel_card_tags_rela", R.string.show_novel_card_tags_setting, keywords = "小说标签 卡片 tag novel"))
         add(Entry(APPEARANCE, "widget_refresh_interval_rela", R.string.v3_widget_refresh_interval_title, keywords = "小组件 桌面 插件 widget 刷新 间隔 换图 频率 refresh interval"))

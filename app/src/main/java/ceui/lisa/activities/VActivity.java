@@ -27,8 +27,11 @@ import ceui.pixiv.api.model.Illust;
 import java.util.Collections;
 import ceui.lisa.utils.Common;
 import ceui.lisa.utils.Params;
+import ceui.lisa.download.IllustDownload;
 import ceui.lisa.utils.PixivOperate;
 import ceui.pixiv.cache.ObjectPool;
+import ceui.pixiv.ui.desktop.DesktopShortcuts;
+import android.view.KeyEvent;
 
 public class VActivity extends BaseActivity<ActivityViewPagerBinding> {
 
@@ -217,5 +220,37 @@ public class VActivity extends BaseActivity<ActivityViewPagerBinding> {
     @Override
     public boolean hideStatusBar() {
         return true;
+    }
+
+    public void showAdjacentIllust(int delta) {
+        if (baseBind == null || baseBind.viewPager == null) return;
+        int next = baseBind.viewPager.getCurrentItem() + delta;
+        if (next < 0) return;
+        if (baseBind.viewPager.getAdapter() != null && next >= baseBind.viewPager.getAdapter().getCount()) return;
+        baseBind.viewPager.setCurrentItem(next);
+    }
+
+    public void bookmarkCurrent() {
+        Illust i = currentIllust();
+        if (i != null) PixivOperate.postLikeDefaultStarType(i);
+    }
+
+    public void downloadCurrent() {
+        Illust i = currentIllust();
+        if (i != null) IllustDownload.downloadIllustAllPages(i);
+    }
+
+    private Illust currentIllust() {
+        PageData page = Container.get().getPage(pageUUID);
+        if (page == null || baseBind == null || baseBind.viewPager == null) return null;
+        int current = baseBind.viewPager.getCurrentItem();
+        if (current < 0 || current >= page.getList().size()) return null;
+        return page.getList().get(current);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (DesktopShortcuts.handle(this, event)) return true;
+        return super.dispatchKeyEvent(event);
     }
 }

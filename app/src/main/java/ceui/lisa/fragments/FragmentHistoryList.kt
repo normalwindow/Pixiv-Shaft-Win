@@ -12,7 +12,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
 import androidx.viewbinding.ViewBinding
 import ceui.lisa.R
-import ceui.lisa.activities.Shaft
+import ceui.pixiv.ui.desktop.ShaftColumns
 import ceui.lisa.activities.UActivity
 import ceui.lisa.activities.VActivity
 import ceui.lisa.core.Container
@@ -70,7 +70,7 @@ class FragmentHistoryList : FeedFragment(), SelectableHistoryTab {
         get() {
             val listWidth = feedBinding.feedListView.layoutManager?.width?.takeIf { it > 0 }
                 ?: resources.displayMetrics.widthPixels
-            return (listWidth / Shaft.sSettings.lineCount).coerceAtLeast(1)
+            return (listWidth / ShaftColumns.resolvedFromList(feedBinding.feedListView)).coerceAtLeast(1)
         }
 
     override fun onCreateRenderers(): List<FeedRenderer<out FeedItem, out ViewBinding>> =
@@ -81,7 +81,7 @@ class FragmentHistoryList : FeedFragment(), SelectableHistoryTab {
         // 曾经这里硬编码成 2，是唯一一条自成一派、无视该设置的插画列表。小说历史是竖向单列卡。
         // 用 StaggeredManager 而不是裸 StaggeredGridLayoutManager：后者存在的理由就是吞掉
         // AOSP predictive-layout 在 fling + 插页同帧时的内部崩溃。
-        val spanCount = if (historyType == TYPE_NOVEL) 1 else Shaft.sSettings.lineCount
+        val spanCount = if (historyType == TYPE_NOVEL) 1 else ShaftColumns.resolvedFromContext(requireContext())
         return StaggeredManager(spanCount, RecyclerView.VERTICAL)
     }
 
@@ -94,6 +94,7 @@ class FragmentHistoryList : FeedFragment(), SelectableHistoryTab {
         // 偏心,故不挂,继续用 cell_history_novel_v3 自带的 margin。
         if (historyType != TYPE_NOVEL) {
             listView.addItemDecoration(SpacesItemDecoration(DensityUtil.dp2px(8.0f)))
+            ShaftColumns.applyTo(listView)
         }
     }
 

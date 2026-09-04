@@ -143,6 +143,10 @@
     <string name="v3_widget_hide_refresh_button_desc">隐藏后只按换图间隔自动换图</string>
     <string name="tablet_split_screen">平板双栏布局</string>
     <string name="tablet_split_screen_desc">在平板等大屏设备上左右分栏显示列表与详情，仅平板生效，切换后需重启应用</string>
+    <string name="line_count_auto">自动</string>
+    <string name="desktop_shortcuts_title">键盘快捷键</string>
+    <string name="desktop_shortcuts_desc">电脑或外接键盘可用的快捷键一览</string>
+    <string name="desktop_shortcuts_cheat_sheet">J / K 下一张 / 上一张\nF 收藏当前作品\nCtrl+S 下载当前作品\nCtrl+F 搜索\nEsc 关闭侧边栏或返回\n1–5 切换首页标签</string>
     <string name="novel_tag">小说标签</string>
     <string name="hot_tag">热门标签</string>
     <string name="ranking_illust">排行榜</string>

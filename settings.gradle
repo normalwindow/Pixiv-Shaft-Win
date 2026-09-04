@@ -1,3 +1,12 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+        maven { url 'https://maven.aliyun.com/repository/public/' }
+    }
+}
+
 plugins {
     // Daemon JVM toolchain（gradle/gradle-daemon-jvm.properties）声明了 daemon 必须跑在
     // JDK 17 上；机器上没有匹配 JDK 时靠这个解析器按里面的 toolchainUrl 自动下载到
@@ -6,3 +15,5 @@ plugins {
 }
 
 include ':app', ':models', ':progressmanager', ':flowlayout-lib', ':actionqueue', ':feeds', ':witstudio', ':websocket', ':banner', ':panel'
+// Fork-only JVM modules. Append-only: never remove upstream includes on merge.
+include ':shared', ':desktop'

@@ -13,13 +13,30 @@
         android:layout_height="match_parent"
         tools:openDrawer="start">
 
+        <!-- 宽屏：NavigationRail 与内容区并排。默认 GONE（手机仍用底栏），layout-w840dp
+             再把它打开——id 必须留在默认 layout 里，否则 ActivityCoverBinding 没有 navigationRail。 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="horizontal">
+
+            <com.google.android.material.navigationrail.NavigationRailView
+                android:id="@+id/navigation_rail"
+                android:layout_width="72dp"
+                android:layout_height="match_parent"
+                android:background="?android:attr/windowBackground"
+                android:visibility="gone"
+                app:labelVisibilityMode="unlabeled"
+                app:menuGravity="center" />
+
         <!-- 底栏「跟随列表滚动收起」：内容页铺满整屏、底栏浮在其上，收起时露出的是列表本身
              而不是一条空白（以前 view_pager 是 layout_above 底栏，底栏一挪就会露出窗口底色）。
              被底栏压住的那一截由 MainActivity 把底栏高度当成底部安全区重新分发 inset，
              各列表据此补 paddingBottom；滑动的触发见 BottomBarAutoHide。 -->
         <androidx.coordinatorlayout.widget.CoordinatorLayout
-            android:layout_width="match_parent"
-            android:layout_height="match_parent">
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1">
 
             <!-- 这层壳只为「重写往内容区分发的底部 inset」留一个挂点(见 MainActivity
                  setUpAutoHidingBottomBar):不能直接把 listener 挂到 view_pager 上——
@@ -51,6 +68,8 @@
             </com.google.android.material.bottomnavigation.BottomNavigationView>
 
         </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+        </LinearLayout>
 
         <!-- 侧边栏：MD3 modal navigation drawer（替代 NavigationView+menu）。
              容器右缘 28dp 圆角（代码里 setClipToOutline），条目为透明底胶囊行，

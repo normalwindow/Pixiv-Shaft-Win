@@ -17,6 +17,7 @@ import ceui.lisa.R
 import ceui.lisa.activities.ColdStartSplashHost
 import ceui.lisa.activities.RankActivity
 import ceui.lisa.activities.Shaft
+import ceui.pixiv.ui.desktop.ShaftColumns
 import ceui.lisa.activities.VActivity
 import ceui.lisa.adapters.RAdapter
 import ceui.lisa.core.Container
@@ -175,13 +176,14 @@ open class RecmdIllustFeedFragment(
 
     override fun onCreateLayoutManager(): RecyclerView.LayoutManager {
         // GAP_HANDLING_NONE 对齐 legacy：带整行 header 的瀑布流开 gap 策略会在回滚时重排跳动
-        return StaggeredManager(Shaft.sSettings.lineCount, RecyclerView.VERTICAL).apply {
+        return StaggeredManager(ShaftColumns.resolvedFromContext(requireContext()), RecyclerView.VERTICAL).apply {
             gapStrategy = StaggeredGridLayoutManager.GAP_HANDLING_NONE
         }
     }
 
     override fun onListReady(listView: RecyclerView) {
         listView.addItemDecoration(SpacesItemWithHeadDecoration(DensityUtil.dp2px(8.0f)))
+        ShaftColumns.applyTo(listView)
     }
 
     override fun onCreateRenderers(): List<FeedRenderer<out FeedItem, out ViewBinding>> {

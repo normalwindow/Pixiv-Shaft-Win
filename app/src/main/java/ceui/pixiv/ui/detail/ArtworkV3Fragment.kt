@@ -29,6 +29,7 @@ import androidx.viewbinding.ViewBinding
 import ceui.lisa.R
 import ceui.lisa.activities.BaseActivity
 import ceui.lisa.activities.Shaft
+import ceui.pixiv.ui.desktop.ShaftColumns
 import ceui.lisa.activities.TemplateActivity
 import ceui.pixiv.actions.FollowVisibility
 import ceui.pixiv.ui.bookmark.SelectTagBottomSheet
@@ -215,9 +216,10 @@ class ArtworkV3Fragment : IllustFeedFragment(R.layout.fragment_artwork_v3) {
     // 「对齐 legacy / Recmd / Artwork」——两份并存只会让下次调 gap 策略时漏改一处。
 
     override fun onListReady(listView: RecyclerView) {
-        val spanCount = Shaft.sSettings.lineCount.coerceAtLeast(1)
+        val spanCount = ShaftColumns.resolvedFromContext(requireContext()).coerceAtLeast(1)
         // 相关作品瀑布流间距对齐外面的推荐插画流(SpacesItemDecoration 也是 8dp);列数跟随设置。
         listView.addItemDecoration(RelatedOnlySpaceDecoration(8.ppppx, spanCount))
+        ShaftColumns.applyTo(listView)
         // header 区块(fullSpan)在 notifyItemChanged 时的默认变更动画会打乱 SGLM 的 fullSpan 追踪。
         listView.itemAnimator = null
         // 跳评论(#970)基线收敛:懒加载区块每次落地(change/insert)都可能触发 end-gap 修正,
