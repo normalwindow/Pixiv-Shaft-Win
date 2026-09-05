@@ -2,12 +2,68 @@ package ceui.pixshaft.desktop
 
 import ceui.pixshaft.shared.net.PixivDns
 import com.google.gson.JsonParser
+import okhttp3.FormBody
+import okhttp3.Request
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 import java.io.IOException
 
 class ChromiumTest {
+    @Test
+    fun tokenPostDetection() {
+        val formRequest = Request.Builder()
+            .url("https://oauth.secure.pixiv.net/auth/token")
+            .post(FormBody.Builder().add("grant_type", "refresh_token").build())
+            .build()
+        assertTrue(Chromium.isTokenPost(formRequest))
+        val getAppApi = Request.Builder()
+            .url("https://app-api.pixiv.net/v1/illust/detail?illust_id=1")
+            .get()
+            .build()
+        assertFalse(Chromium.isTokenPost(getAppApi))
+        val getOauth = Request.Builder()
+            .url("https://oauth.secure.pixiv.net/auth/token")
+            .get()
+            .build()
+        assertFalse(Chromium.isTokenPost(getOauth))
+        val bodyless = Request.Builder()
+            .url("https://oauth.secure.pixiv.net/auth/token")
+            .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .build()
+        assertFalse(Chromium.isTokenPost(bodyless))
+    }
+
+    @Test
+    fun formPostSpecEncodesFields() {
+        val form = FormBody.Builder()
+            .add("client_id", "MOBrBDS8blbauoSck0ZfDbtuzpyT")
+            .add("grant_type", "refresh_token")
+            .build()
+        val spec = Chromium.formPostSpec("https://oauth.secure.pixiv.net/auth/token", form)
+        assertEquals("https://oauth.secure.pixiv.net/auth/token", spec.get("url").asString)
+        val fields = spec.getAsJsonArray("fields")
+        assertEquals(2, fields.size())
+        assertEquals("grant_type", fields[1].asJsonObject.get("name").asString)
+        assertEquals("refresh_token", fields[1].asJsonObject.get("value").asString)
+    }
+
+    @Test
+    fun parsesTokenPageStateAndCaptcha() {
+        val (href, ready, text) = Chromium.parseTokenPageState(
+            """{"href":"https://oauth.secure.pixiv.net/auth/token","ready":"complete","text":"{\"access_token\":\"a\"}"}""",
+        )
+        assertTrue(href.endsWith("/auth/token"))
+        assertEquals("complete", ready)
+        assertTrue(text.contains("access_token"))
+        assertTrue(Chromium.parseTokenPageState(null).first.isEmpty())
+        assertTrue(Chromium.parseTokenPageState("not json").second.isEmpty())
+        assertTrue(Chromium.looksLikeCaptcha("为了确认您是正规用户，请进行CAPTCHA验证。"))
+        assertFalse(Chromium.looksLikeCaptcha("""{"access_token":"a"}"""))
+    }
+
     @Test
     fun hostResolverPinsCloudflare() {
         val rules = Chromium.hostResolverRules()
@@ -25,6 +81,59 @@ class ChromiumTest {
         assertTrue(origins.contains("accounts.pixiv.net:443"))
         assertFalse(origins.contains("i.pximg.net"))
         assertFalse(origins.contains(" "))
+    }
+
+    @Test
+    fun headlessLaunchUsesNewHeadlessAndAutoDebugPort() {
+        val edge = java.nio.file.Path.of("D:\\Sware\\Edge\\Edge\\Application\\msedge.exe")
+        val args = Chromium.browserLaunchArgs(
+            browser = edge,
+            userDataDir = java.nio.file.Path.of("C:\\tmp\\chromium-net"),
+            cacheDir = java.nio.file.Path.of("C:\\tmp\\chromium-cache"),
+            crashDir = java.nio.file.Path.of("C:\\tmp\\chromium-crash"),
+            debugPort = 0,
+            headless = true,
+        )
+        assertTrue(args.contains("--headless=new"))
+        assertFalse(args.any { it == "--headless" })
+        assertTrue(args.contains("--remote-debugging-port=0"))
+        assertTrue(args.contains("--remote-debugging-address=127.0.0.1"))
+        assertTrue(args.contains("--edge-skip-compat-layer-relaunch"))
+        assertTrue(args.contains("--no-proxy-server"))
+        assertTrue(args.any { it.startsWith("--origin-to-force-quic-on=") })
+        val chrome = Chromium.browserLaunchArgs(
+            browser = java.nio.file.Path.of("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
+            userDataDir = java.nio.file.Path.of("C:\\tmp\\chromium-net"),
+            cacheDir = java.nio.file.Path.of("C:\\tmp\\chromium-cache"),
+            crashDir = java.nio.file.Path.of("C:\\tmp\\chromium-crash"),
+            debugPort = 0,
+            headless = false,
+        )
+        assertFalse(chrome.contains("--headless=new"))
+        assertFalse(chrome.contains("--edge-skip-compat-layer-relaunch"))
+        assertTrue(chrome.contains("--window-size=480,800"))
+    }
+
+    @Test
+    fun originWarmupStaysOnHostAndSkipsHomepage() {
+        assertTrue(Chromium.originWarmupUrl("https://app-api.pixiv.net") == "https://app-api.pixiv.net/robots.txt")
+        assertTrue(Chromium.originWarmupUrl("https://www.pixiv.net/") == "https://www.pixiv.net/robots.txt")
+        assertTrue(Chromium.protocolOf("h3") == okhttp3.Protocol.QUIC)
+        assertTrue(Chromium.protocolOf("h2") == okhttp3.Protocol.HTTP_2)
+        assertTrue(Chromium.protocolOf("http/1.1") == okhttp3.Protocol.HTTP_1_1)
+    }
+
+    @Test
+    fun parsesDevToolsActivePortFile() {
+        assertTrue(Chromium.parseDevToolsActivePort("14936\n/devtools/browser/abc") == 14936)
+        assertTrue(Chromium.parseDevToolsActivePort("0\n/devtools/browser/abc") == null)
+        assertTrue(Chromium.parseDevToolsActivePort("") == null)
+        assertTrue(
+            Chromium.parseDevToolsListeningPort(
+                "DevTools listening on ws://127.0.0.1:14936/devtools/browser/43ad8e6f",
+            ) == 14936,
+        )
+        assertTrue(Chromium.parseDevToolsListeningPort("nope") == null)
     }
 
     @Test
@@ -79,6 +188,12 @@ class ChromiumTest {
     }
 
     @Test
+    fun loopbackClientNeverUsesSystemProxy() {
+        val client = Chromium.loopbackClient()
+        assertTrue(client.proxy == java.net.Proxy.NO_PROXY)
+    }
+
+    @Test
     fun parsesJavaProxy() {
         val http = Chromium.parseJavaProxy("127.0.0.1:7890")
         assertTrue(http != null)
@@ -96,6 +211,40 @@ class ChromiumTest {
         assertTrue(!channel.offer("pixiv://account/login?code=two"))
         assertTrue(channel.uri?.contains("code=one") == true)
         assertTrue(!channel.offer("https://example.com"))
+    }
+
+    @Test
+    fun webAuthHostFindsExplicitProperty() {
+        val previous = System.getProperty("pixshaft.webauth")
+        val exe = File.createTempFile("PixShaftWebAuth", ".exe")
+        try {
+            System.setProperty("pixshaft.webauth", exe.absolutePath)
+            assertTrue(WebAuthHost.findExe()?.toAbsolutePath().toString().equals(exe.toPath().toAbsolutePath().toString(), true))
+        } finally {
+            if (previous == null) System.clearProperty("pixshaft.webauth") else System.setProperty("pixshaft.webauth", previous)
+            exe.delete()
+        }
+    }
+
+    @Test
+    fun webAuthResultParsesTokenLine() {
+        val result = WebAuthHost.parseResult("TOKEN\t{\"access_token\":\"a\",\"refresh_token\":\"b\"}")
+        assertTrue(result.tokenJson?.contains("access_token") == true)
+        val token = WebAuthHost.parseToken(result.tokenJson!!)
+        assertTrue(token.access_token == "a")
+        assertTrue(token.refresh_token == "b")
+    }
+
+    @Test
+    fun loginReturnCancelUnblocksWaiter() {
+        val channel = LoginReturnChannel()
+        assertFalse(channel.isCancelled)
+        channel.cancel()
+        assertTrue(channel.isCancelled)
+        assertTrue(channel.isComplete)
+        assertTrue(!channel.offer("pixiv://account/login?code=late"))
+        assertTrue(channel.uri == null)
+        assertTrue(channel.await(1))
     }
 
     @Test

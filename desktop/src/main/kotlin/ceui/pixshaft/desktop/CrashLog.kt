@@ -6,10 +6,8 @@ import java.time.Instant
 
 object CrashLog {
     fun installDefaultHandler() {
-        val previous = Thread.getDefaultUncaughtExceptionHandler()
-        Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+        Thread.setDefaultUncaughtExceptionHandler { _, error ->
             write(error)
-            previous?.uncaughtException(thread, error)
         }
     }
 

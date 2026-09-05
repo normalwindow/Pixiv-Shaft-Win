@@ -1,1 +1,4 @@
 /build
+/distribute
+/webview-auth/bin
+/webview-auth/obj

@@ -20,3 +20,11 @@ ncnn.zip
 /keystore.jks
 /keystore.properties
 Pixiv-Shaft-Win.code-workspace
+
+# Windows desktop client (PixShaft-Win)
+desktop/build/
+desktop/distribute/
+desktop/webview-auth/bin/
+desktop/webview-auth/obj/
+
+*.bak

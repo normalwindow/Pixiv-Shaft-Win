@@ -3,8 +3,10 @@ package ceui.pixshaft.desktop
 import ceui.pixshaft.shared.net.PixivClientIdentity
 import ceui.pixshaft.shared.net.PixivDns
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import okhttp3.FormBody
 import okhttp3.Headers
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -17,7 +19,6 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okio.ByteString
 import java.io.IOException
-import java.net.ServerSocket
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Base64
@@ -62,6 +63,130 @@ object Chromium {
 
     fun originToForceQuicOn(): String =
         PixivDns.API_HOSTS.joinToString(",") { "$it:443" }
+
+    /**
+     * Headless fetch and login share this argv. Edge 150's old `--headless`
+     * (without `=new`) aborts on an existing profile with
+     * "Multiple targets are not supported in headless mode" and never binds
+     * DevTools — that is what made 直连 look like a hang at HTTPS 采样中.
+     * `--remote-debugging-port=0` lets Chromium pick a port and write
+     * `DevToolsActivePort`, avoiding Hyper-V excluded ranges / TOCTOU from
+     * `ServerSocket(0)`.
+     */
+    internal fun browserLaunchArgs(
+        browser: Path,
+        userDataDir: Path,
+        cacheDir: Path,
+        crashDir: Path,
+        debugPort: Int,
+        headless: Boolean,
+    ): List<String> {
+        val args = mutableListOf(
+            browser.toString(),
+            "--user-data-dir=${userDataDir.toAbsolutePath()}",
+            "--disk-cache-dir=${cacheDir.toAbsolutePath()}",
+            "--crash-dumps-dir=${crashDir.toAbsolutePath()}",
+            "--remote-debugging-port=$debugPort",
+            "--remote-debugging-address=127.0.0.1",
+            "--remote-allow-origins=*",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--disable-extensions",
+            "--disable-sync",
+            "--disable-background-networking",
+            "--disable-popup-blocking",
+            "--disable-session-crashed-bubble",
+            "--hide-crash-restore-bubble",
+            "--disable-features=Translate,MediaRouter,msImplicitSignin",
+            "--host-resolver-rules=${hostResolverRules()}",
+            "--enable-quic",
+            "--origin-to-force-quic-on=${originToForceQuicOn()}",
+            "--disable-hang-monitor",
+            "--disable-renderer-backgrounding",
+        )
+        if (browser.fileName.toString().contains("msedge", ignoreCase = true)) {
+            args += "--edge-skip-compat-layer-relaunch"
+        }
+        args += proxyArgs()
+        if (headless) {
+            args += "--headless=new"
+            args += "--disable-gpu"
+            args += "--window-position=-32000,-32000"
+        } else {
+            args += "--window-size=480,800"
+        }
+        args += "about:blank"
+        return args
+    }
+
+    internal fun parseDevToolsActivePort(text: String): Int? {
+        val first = text.lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() } ?: return null
+        return first.toIntOrNull()?.takeIf { it in 1..65535 }
+    }
+
+    private val devToolsListening = Regex(
+        """DevTools listening on ws://(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)/""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    internal fun parseDevToolsListeningPort(log: String): Int? =
+        devToolsListening.find(log)?.groupValues?.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..65535 }
+
+    /** Tiny same-origin document so fetch() is CORS-safe without loading the real homepage. */
+    internal fun originWarmupUrl(origin: String): String = origin.trimEnd('/') + "/robots.txt"
+
+    internal fun protocolOf(name: String?): Protocol = when {
+        name.isNullOrBlank() -> Protocol.HTTP_1_1
+        name.startsWith("h3", ignoreCase = true) ||
+            name.contains("quic", ignoreCase = true) ||
+            name.contains("http/3", ignoreCase = true) -> Protocol.QUIC
+        name.startsWith("h2", ignoreCase = true) ||
+            name.contains("http/2", ignoreCase = true) -> Protocol.HTTP_2
+        else -> Protocol.HTTP_1_1
+    }
+
+    /**
+     * POST oauth.secure.pixiv.net/auth/token cannot go out as a fetch(): the
+     * browser stack gets a WAF 403 there no matter which headers are stripped.
+     * A **top-level form POST navigation** (the same shape pixiv's own login
+     * post-redirect uses) passes, but only once the headless desktop UA is
+     * overridden — a HeadlessEdge UA earns a CAPTCHA interstitial instead of
+     * the OAuth JSON.
+     */
+    internal fun isTokenPost(request: Request): Boolean =
+        request.method.equals("POST", ignoreCase = true) &&
+            request.url.host.equals("oauth.secure.pixiv.net", ignoreCase = true) &&
+            request.url.encodedPath == "/auth/token" &&
+            request.body is FormBody
+
+    /** Form fields rendered to the `[{name,value}]` spec consumed by executeFormPost. */
+    internal fun formPostSpec(url: String, form: FormBody): JsonObject = JsonObject().apply {
+        addProperty("url", url)
+        add("fields", JsonArray().apply {
+            for (i in 0 until form.size) {
+                add(
+                    JsonObject().apply {
+                        addProperty("name", form.name(i))
+                        addProperty("value", form.value(i))
+                    },
+                )
+            }
+        })
+    }
+
+    /** The /auth/token page state polled by executeFormPost: href, readyState, body text. */
+    internal fun parseTokenPageState(json: String?): Triple<String, String, String> {
+        val obj = json?.let { runCatching { JsonParser.parseString(it).asJsonObject }.getOrNull() }
+        return Triple(
+            obj?.get("href")?.asString.orEmpty(),
+            obj?.get("ready")?.asString.orEmpty(),
+            obj?.get("text")?.asString.orEmpty(),
+        )
+    }
+
+    /** True when pixiv answered with its 人机验证 interstitial instead of OAuth JSON. */
+    internal fun looksLikeCaptcha(body: String): Boolean =
+        body.contains("CAPTCHA", ignoreCase = true) || body.contains("须先进行验证")
 
     fun findBrowser(): Path? {
         System.getProperty("pixshaft.chromium")?.let { propertyPath(it) }?.let { return it }
@@ -148,7 +273,11 @@ object Chromium {
         return normalizeProxyServer(server)
     }
 
+    @Volatile
+    var directConnect: Boolean = true
+
     fun detectProxy(): String? {
+        if (directConnect) return null
         if (System.getenv("PIXSHAFT_NO_PROXY") == "1") return null
         System.getenv("PIXSHAFT_PROXY")?.let { normalizeProxyServer(it) }?.let { return it }
         val envKeys = listOf(
@@ -172,6 +301,99 @@ object Chromium {
     }
 
     fun javaProxy(): java.net.Proxy = parseJavaProxy(detectProxy()) ?: java.net.Proxy.NO_PROXY
+
+    /** DevTools is loopback. Never send it through Clash / system proxy. */
+    fun loopbackClient(connectSec: Long = 1, readSec: Long = 2): OkHttpClient =
+        OkHttpClient.Builder()
+            .proxy(java.net.Proxy.NO_PROXY)
+            .connectTimeout(connectSec, TimeUnit.SECONDS)
+            .readTimeout(readSec, TimeUnit.SECONDS)
+            .build()
+
+    private val livePids = ConcurrentHashMap.newKeySet<Long>()
+
+    fun registerProcess(process: Process) {
+        livePids.add(process.pid())
+    }
+
+    fun killProcessTree(process: Process) {
+        val pid = runCatching { process.pid() }.getOrNull()
+        if (pid != null) livePids.remove(pid)
+        killPidTree(pid)
+        runCatching { process.destroyForcibly() }
+    }
+
+    fun abortLoginBrowsers() {
+        killByCommandLineMarkers("chromium-login", "pixshaft-login")
+    }
+
+    fun nukeAll() {
+        val descendants = runCatching {
+            ProcessHandle.current().descendants().map { it.pid() }.toList()
+        }.getOrDefault(emptyList())
+        val targets = (livePids + descendants).toSet()
+        targets.forEach { killPidTree(it) }
+        livePids.clear()
+        // ProcessHandle.commandLine() is often empty on Windows; CIM sees the real argv.
+        killByCommandLineMarkers("chromium-login", "chromium-net")
+        waitUntilGone(targets, 1_500)
+    }
+
+    private fun killPidTree(pid: Long?) {
+        if (pid == null || pid == ProcessHandle.current().pid()) return
+        runCatching {
+            ProcessHandle.of(pid).ifPresent { handle ->
+                handle.descendants().forEach { child -> runCatching { child.destroyForcibly() } }
+                handle.destroyForcibly()
+            }
+        }
+        if (!isWindows()) return
+        runCatching {
+            val proc = ProcessBuilder("taskkill", "/F", "/T", "/PID", pid.toString())
+                .redirectErrorStream(true)
+                .start()
+            if (!proc.waitFor(2, java.util.concurrent.TimeUnit.SECONDS)) proc.destroyForcibly()
+        }
+    }
+
+    private fun killByCommandLineMarkers(vararg markers: String) {
+        if (markers.isEmpty()) return
+        if (!isWindows()) {
+            runCatching {
+                ProcessHandle.allProcesses().forEach { handle ->
+                    val cmd = handle.info().commandLine().orElse("") + handle.info().command().orElse("")
+                    if (markers.any { cmd.contains(it) }) runCatching { handle.destroyForcibly() }
+                }
+            }
+            return
+        }
+        val like = markers.joinToString(" -or ") { marker ->
+            "(\$_.CommandLine -like '*${marker.replace("'", "")}*')"
+        }
+        val script =
+            "Get-CimInstance Win32_Process | Where-Object { $like } | " +
+                "ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }"
+        runCatching {
+            val proc = ProcessBuilder("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
+                .redirectErrorStream(true)
+                .start()
+            if (!proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) proc.destroyForcibly()
+        }
+    }
+
+    private fun waitUntilGone(pids: Collection<Long>, timeoutMs: Long) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val alive = pids.any { pid ->
+                ProcessHandle.of(pid).map { it.isAlive }.orElse(false)
+            }
+            if (!alive) return
+            Thread.sleep(40)
+        }
+    }
+
+    private fun isWindows(): Boolean =
+        System.getProperty("os.name").orEmpty().contains("Windows", ignoreCase = true)
 
     internal fun parseJavaProxy(raw: String?): java.net.Proxy? {
         val normalized = raw?.let { normalizeProxyServer(it) } ?: return null
@@ -344,10 +566,7 @@ class ChromiumSession private constructor(
     private val loginUrl: String?,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
-    private val localHttp = OkHttpClient.Builder()
-        .connectTimeout(1, TimeUnit.SECONDS)
-        .readTimeout(2, TimeUnit.SECONDS)
-        .build()
+    private val localHttp = Chromium.loopbackClient()
     private val recentRequestUrls = ConcurrentHashMap<String, String>()
     private val pendingSessions = ConcurrentLinkedDeque<String>()
     private val sawAccounts = AtomicBoolean(false)
@@ -463,6 +682,9 @@ class ChromiumSession private constructor(
         } finally {
             drainPaused(paused, failAll = true)
             cdp.removeListener(listener)
+        }
+        if (sink.isCancelled) {
+            throw InterruptedException("已取消登录")
         }
         val uri = sink.uri
             ?: throw IOException("登录超时：Chromium 窗口里没有拿到带 code= 的回调。可粘贴 refresh_token。")
@@ -696,6 +918,127 @@ class ChromiumSession private constructor(
         throw last ?: IOException("Chromium fetch 失败")
     }
 
+    /**
+     * Top-level form POST navigation, used for POST oauth.secure.pixiv.net/auth/token.
+     * Reads the OAuth JSON back out of the document that navigation lands on. The
+     * caller (ChromiumHttp) serializes against execute(), so the shared page is safe.
+     */
+    fun executeFormPost(request: Request): Response {
+        val form = request.body as? FormBody
+            ?: throw IOException("auth/token 需要 FormBody: ${request.url.encodedPath}")
+        overrideUserAgent(cdp)
+        // Web-session cookies only widen the bot-fingerprint surface; the OAuth
+        // token endpoint takes none of them.
+        runCatching { cdp.send("Network.clearBrowserCookies", timeoutSec = 3) }
+        val spec = Chromium.formPostSpec(request.url.toString(), form)
+        val expression = """
+            (async (spec) => {
+              const form = document.createElement('form');
+              form.method = 'POST';
+              form.action = spec.url;
+              form.autocomplete = 'off';
+              form.style.display = 'none';
+              for (const kv of spec.fields) {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = kv.name;
+                input.value = kv.value;
+                input.autocomplete = 'off';
+                form.appendChild(input);
+              }
+              document.body.appendChild(form);
+              form.submit();
+              return 'submitted';
+            })(${Gson().toJson(spec)})
+        """.trimIndent()
+        val submit = JsonObject().apply {
+            addProperty("expression", expression)
+            addProperty("awaitPromise", true)
+            addProperty("returnByValue", true)
+        }
+        var responseStatus = 0
+        val listener: (String, JsonObject) -> Unit = { method, params ->
+            if (method == "Network.responseReceived") {
+                val response = params.getAsJsonObject("response")
+                val url = response?.get("url")?.asString.orEmpty()
+                if (url.startsWith(request.url.toString(), ignoreCase = true)) {
+                    responseStatus = response?.get("status")?.asInt ?: 0
+                }
+            }
+        }
+        cdp.addListener(listener)
+        try {
+            val result = cdp.send("Runtime.evaluate", submit, timeoutSec = 15)
+            if (result.getAsJsonObject("exceptionDetails") != null) {
+                throw IOException("auth/token 表单提交失败")
+            }
+            val target = request.url.toString()
+            val deadline = System.currentTimeMillis() + 15_000
+            var href = ""
+            var body = ""
+            var protocol: String? = null
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(300)
+                val state = runCatching {
+                    val probe = JsonObject().apply {
+                        addProperty(
+                            "expression",
+                            "JSON.stringify({href:location.href,ready:document.readyState," +
+                                "text:(document.body?document.body.innerText:'')," +
+                                "proto:(performance.getEntriesByType('navigation')[0]||{}).nextHopProtocol||''})",
+                        )
+                        addProperty("returnByValue", true)
+                    }
+                    val value = cdp.send("Runtime.evaluate", probe, timeoutSec = 8)
+                        .getAsJsonObject("result")?.get("value")?.asString
+                    Chromium.parseTokenPageState(value)
+                }.getOrNull() ?: continue
+                href = state.first
+                if (href.startsWith(target, ignoreCase = true) && state.second == "complete") {
+                    body = state.third
+                    protocol = runCatching {
+                        val entry = cdp.send(
+                            "Runtime.evaluate",
+                            JsonObject().apply {
+                                addProperty(
+                                    "expression",
+                                    "(performance.getEntriesByType('navigation')[0]||{}).nextHopProtocol||''",
+                                )
+                                addProperty("returnByValue", true)
+                            },
+                            timeoutSec = 5,
+                        ).getAsJsonObject("result")?.get("value")?.asString
+                        entry
+                    }.getOrNull()
+                    break
+                }
+            }
+            if (!href.startsWith(target, ignoreCase = true)) {
+                throw IOException("auth/token 表单跳转未完成（当前 $href）")
+            }
+            if (Chromium.looksLikeCaptcha(body)) {
+                throw IOException("Pixiv 要求人机验证（${body.take(60)}），请稍后再试或开启代理")
+            }
+            val status = when {
+                responseStatus > 0 -> responseStatus
+                body.trimStart().startsWith("{") -> if (body.contains("\"access_token\"")) 200 else 400
+                else -> throw IOException("auth/token 返回异常响应: ${body.take(120)}")
+            }
+            return Response.Builder()
+                .request(request)
+                .protocol(Chromium.protocolOf(protocol))
+                .code(status)
+                .message(if (status in 200..299) "OK" else "Error")
+                .header("content-type", "application/json")
+                .body(
+                    body.toByteArray().toResponseBody("application/json".toMediaTypeOrNull()),
+                )
+                .build()
+        } finally {
+            cdp.removeListener(listener)
+        }
+    }
+
     private fun evaluateFetch(request: Request): Response {
         ensureFetchOrigin(request)
         val spec = JsonObject().apply {
@@ -718,29 +1061,44 @@ class ChromiumSession private constructor(
               if (spec.contentType && !headers['Content-Type'] && !headers['content-type']) {
                 headers['Content-Type'] = spec.contentType;
               }
-              const init = { method: spec.method, headers, redirect: 'follow' };
+              const ac = new AbortController();
+              const timer = setTimeout(() => ac.abort('timeout'), 12000);
+              const init = {
+                method: spec.method,
+                headers,
+                redirect: 'follow',
+                credentials: 'omit',
+                signal: ac.signal
+              };
               if (spec.bodyBase64) {
                 const bin = atob(spec.bodyBase64);
                 const bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
                 init.body = bytes;
               }
-              const res = await fetch(spec.url, init);
-              const buf = await res.arrayBuffer();
-              const bytes = new Uint8Array(buf);
-              let binary = '';
-              const chunk = 0x8000;
-              for (let i = 0; i < bytes.length; i += chunk) {
-                binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+              try {
+                const res = await fetch(spec.url, init);
+                const buf = await res.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                let binary = '';
+                const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) {
+                  binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+                }
+                const outHeaders = {};
+                res.headers.forEach((v, k) => { outHeaders[k] = v; });
+                const perf = performance.getEntriesByName(spec.url).pop()
+                  || performance.getEntriesByType('resource').pop();
+                return JSON.stringify({
+                  status: res.status,
+                  statusText: res.statusText,
+                  headers: outHeaders,
+                  protocol: (perf && perf.nextHopProtocol) || '',
+                  bodyBase64: btoa(binary)
+                });
+              } finally {
+                clearTimeout(timer);
               }
-              const outHeaders = {};
-              res.headers.forEach((v, k) => { outHeaders[k] = v; });
-              return JSON.stringify({
-                status: res.status,
-                statusText: res.statusText,
-                headers: outHeaders,
-                bodyBase64: btoa(binary)
-              });
             })(${Gson().toJson(spec)})
         """.trimIndent()
         val params = JsonObject().apply {
@@ -768,7 +1126,7 @@ class ChromiumSession private constructor(
         val mediaType = headerBuilder["content-type"]?.toMediaTypeOrNull()
         return Response.Builder()
             .request(request)
-            .protocol(Protocol.HTTP_1_1)
+            .protocol(Chromium.protocolOf(parsed.get("protocol")?.asString))
             .code(status)
             .message(parsed.get("statusText")?.asString ?: "OK")
             .headers(headerBuilder.build())
@@ -776,57 +1134,73 @@ class ChromiumSession private constructor(
             .build()
     }
 
-    private fun ensureFetchOrigin(request: Request) {
-        val origin = "${request.url.scheme}://${request.url.host}"
-        val current = runCatching {
+    private fun currentOrigin(): String? {
+        return runCatching {
             cdp.send(
                 "Runtime.evaluate",
                 JsonObject().apply {
                     addProperty("expression", "location.origin")
                     addProperty("returnByValue", true)
                 },
-                timeoutSec = 3,
+                timeoutSec = 2,
             )
         }.getOrNull()?.getAsJsonObject("result")?.get("value")?.asString
-        if (current.equals(origin, ignoreCase = true)) return
-        runCatching { cdp.send("Fetch.disable", timeoutSec = 3) }
-        cdp.send(
-            "Page.navigate",
-            JsonObject().apply { addProperty("url", "$origin/") },
-            timeoutSec = 10,
-        )
-        repeat(15) {
-            Thread.sleep(200)
-            val ready = runCatching {
-                cdp.send(
-                    "Runtime.evaluate",
-                    JsonObject().apply {
-                        addProperty("expression", "location.origin")
-                        addProperty("returnByValue", true)
-                    },
-                    timeoutSec = 3,
-                )
-            }.getOrNull()?.getAsJsonObject("result")?.get("value")?.asString
-            if (ready.equals(origin, ignoreCase = true)) return
+    }
+
+    private fun ensureFetchOrigin(request: Request) {
+        val origin = "${request.url.scheme}://${request.url.host}"
+        if (currentOrigin().equals(origin, ignoreCase = true)) return
+        runCatching { cdp.send("Fetch.disable", timeoutSec = 2) }
+        val committed = CountDownLatch(1)
+        val listener: (String, JsonObject) -> Unit = { method, params ->
+            val url = when (method) {
+                "Page.frameNavigated" -> params.getAsJsonObject("frame")?.get("url")?.asString
+                "Page.lifecycleEvent" -> {
+                    if (params.get("name")?.asString == "commit" ||
+                        params.get("name")?.asString == "DOMContentLoaded"
+                    ) {
+                        origin
+                    } else {
+                        null
+                    }
+                }
+                else -> null
+            }
+            if (url != null && url.startsWith(origin, ignoreCase = true)) {
+                committed.countDown()
+            }
+        }
+        cdp.addListener(listener)
+        try {
+            cdp.send(
+                "Page.navigate",
+                JsonObject().apply { addProperty("url", Chromium.originWarmupUrl(origin)) },
+                timeoutSec = 8,
+            )
+            committed.await(6, TimeUnit.SECONDS)
+            repeat(20) {
+                if (currentOrigin().equals(origin, ignoreCase = true)) return
+                Thread.sleep(100)
+            }
+        } finally {
+            cdp.removeListener(listener)
+            runCatching { cdp.send("Page.stopLoading", timeoutSec = 2) }
         }
     }
 
     private fun recover(onStatus: (String) -> Unit) {
         onStatus("登录页崩溃，正在重连 DevTools…")
-        reattach(cdp, debugPort, onStatus)
+        reattach(cdp, process, debugPort, onStatus)
     }
 
     override fun close() {
         if (!closed.compareAndSet(false, true)) return
         runCatching { cdp.close() }
         runCatching {
-            localHttp.dispatcher.executorService.shutdown()
+            localHttp.dispatcher.executorService.shutdownNow()
             localHttp.connectionPool.evictAll()
         }
-        runCatching {
-            process.destroy()
-            if (!process.waitFor(2, TimeUnit.SECONDS)) process.destroyForcibly()
-        }
+        Chromium.killProcessTree(process)
     }
 
     companion object {
@@ -859,50 +1233,35 @@ class ChromiumSession private constructor(
                     "本机没有 Chrome / Edge，无法打开 Pixiv 登录。请安装 Microsoft Edge 或 Google Chrome，或粘贴 refresh_token。",
                 )
             Files.createDirectories(userDataDir)
+            val cacheDir = AppPaths.cacheRoot().resolve("chromium")
+            val crashDir = AppPaths.cacheRoot().resolve("chromium-crash")
+            Files.createDirectories(cacheDir)
+            Files.createDirectories(crashDir)
             writePreferences(userDataDir)
-            val port = freePort()
-            val args = mutableListOf(
-                browser.toString(),
-                "--user-data-dir=${userDataDir.toAbsolutePath()}",
-                "--remote-debugging-port=$port",
-                "--remote-allow-origins=*",
-                "--no-first-run",
-                "--no-default-browser-check",
-                "--disable-extensions",
-                "--disable-sync",
-                "--disable-background-networking",
-                "--disable-popup-blocking",
-                "--disable-features=Translate,MediaRouter",
-                "--host-resolver-rules=${Chromium.hostResolverRules()}",
-                "--enable-quic",
-                "--origin-to-force-quic-on=${Chromium.originToForceQuicOn()}",
-                "--disable-hang-monitor",
-                "--disable-renderer-backgrounding",
+            val args = Chromium.browserLaunchArgs(
+                browser = browser,
+                userDataDir = userDataDir,
+                cacheDir = cacheDir,
+                crashDir = crashDir,
+                debugPort = 0,
+                headless = headless,
             )
-            if (!headless) {
-                args += "--window-size=480,800"
-            }
-            args += Chromium.proxyArgs()
-            if (headless) {
-                args += "--headless=new"
-                args += "--disable-gpu"
-            }
-            args += "about:blank"
-            onStatus("打开 ${browser.fileName}（端口 $port）…")
+            onStatus("打开 ${browser.fileName}…")
             val process = ProcessBuilder(args)
                 .directory(userDataDir.toFile())
                 .redirectErrorStream(true)
                 .start()
+            Chromium.registerProcess(process)
             val logTail = ConcurrentLinkedDeque<String>()
             drain(process, logTail)
             try {
-                val pageWs = waitForPageWebSocket(port)
+                val (port, pageWs) = waitForPageWebSocket(process, userDataDir, 0, logTail)
                 val cdp = CdpClient(pageWs)
                 cdp.connect()
                 preparePage(cdp, port, onStatus, loginEmulation = !headless)
                 if (!url.isNullOrBlank() && url != "about:blank") {
                     onStatus("正在打开 Pixiv 登录页…")
-                    navigateAndPrepare(cdp, port, url, onStatus)
+                    navigateAndPrepare(cdp, process, userDataDir, port, url, onStatus)
                 }
                 onStatus("已打开登录窗，请在弹出的 Chromium 窗口完成登录")
                 return ChromiumSession(process, cdp, port, url)
@@ -936,8 +1295,10 @@ class ChromiumSession private constructor(
         ) {
             enableTargetDiscovery(cdp)
             enableDomains(cdp)
+            // The net session needs this too: a HeadlessEdg UA turns every
+            // oauth.secure POST into pixiv's CAPTCHA interstitial.
+            overrideUserAgent(cdp)
             if (loginEmulation) {
-                overrideUserAgent(cdp)
                 overrideDevice(cdp)
                 installHooks(cdp)
                 enableFetch(cdp)
@@ -955,6 +1316,8 @@ class ChromiumSession private constructor(
 
         private fun navigateAndPrepare(
             cdp: CdpClient,
+            process: Process,
+            userDataDir: Path,
             port: Int,
             url: String,
             onStatus: (String) -> Unit,
@@ -965,7 +1328,7 @@ class ChromiumSession private constructor(
                     if (attempt > 0) {
                         onStatus("登录页目标崩溃，正在重连 DevTools（${attempt + 1}/4）…")
                         Thread.sleep(400L * attempt)
-                        reattach(cdp, port, onStatus)
+                        reattach(cdp, process, port, onStatus, userDataDir)
                     }
                     cdp.send(
                         "Page.navigate",
@@ -987,8 +1350,21 @@ class ChromiumSession private constructor(
             throw lastError ?: IOException("无法导航到登录页")
         }
 
-        private fun reattach(cdp: CdpClient, port: Int, onStatus: (String) -> Unit) {
-            cdp.reconnect(waitForPageWebSocket(port, excludeWs = cdp.currentWsUrl))
+        private fun reattach(
+            cdp: CdpClient,
+            process: Process,
+            port: Int,
+            onStatus: (String) -> Unit,
+            userDataDir: Path? = null,
+        ) {
+            val (_, pageWs) = waitForPageWebSocket(
+                process,
+                userDataDir,
+                port,
+                ConcurrentLinkedDeque(),
+                excludeWs = cdp.currentWsUrl,
+            )
+            cdp.reconnect(pageWs)
             enableDomains(cdp)
             overrideUserAgent(cdp)
             overrideDevice(cdp)
@@ -1018,6 +1394,14 @@ class ChromiumSession private constructor(
             sendOrRecover(cdp, "Runtime.enable", sessionId)
             runCatching { cdp.send("Inspector.enable", sessionId = sessionId) }
             sendOrRecover(cdp, "Network.enable", sessionId)
+            runCatching {
+                cdp.send(
+                    "Page.setLifecycleEventsEnabled",
+                    JsonObject().apply { addProperty("enabled", true) },
+                    sessionId,
+                    timeoutSec = 3,
+                )
+            }
         }
 
         private fun sendOrRecover(cdp: CdpClient, method: String, sessionId: String? = null) {
@@ -1162,12 +1546,6 @@ class ChromiumSession private constructor(
             }
         }
 
-        private fun freePort(): Int =
-            ServerSocket(0).use { socket ->
-                socket.reuseAddress = true
-                socket.localPort
-            }
-
         private fun drain(process: Process, logTail: ConcurrentLinkedDeque<String>) {
             thread(name = "chromium-out", isDaemon = true) {
                 runCatching {
@@ -1182,50 +1560,82 @@ class ChromiumSession private constructor(
             }
         }
 
-        private fun waitForPageWebSocket(port: Int, excludeWs: String? = null): String {
-            val http = OkHttpClient.Builder()
-                .connectTimeout(1, TimeUnit.SECONDS)
-                .readTimeout(2, TimeUnit.SECONDS)
-                .build()
+        private fun waitForPageWebSocket(
+            process: Process,
+            userDataDir: Path?,
+            requestedPort: Int,
+            logTail: ConcurrentLinkedDeque<String>,
+            excludeWs: String? = null,
+        ): Pair<Int, String> {
+            val http = Chromium.loopbackClient()
             var lastError: Throwable? = null
+            var boundPort = requestedPort.takeIf { it > 0 } ?: 0
             repeat(80) {
-                try {
-                    val list = httpGet(http, "http://127.0.0.1:$port/json/list")
-                    val pages = JsonParser.parseString(list).asJsonArray.mapNotNull { element ->
-                        val obj = element.asJsonObject
-                        val type = obj.get("type")?.asString.orEmpty()
-                        val ws = obj.get("webSocketDebuggerUrl")?.asString ?: return@mapNotNull null
-                        if (ws == excludeWs) return@mapNotNull null
-                        if (type == "page" || type == "app" || type == "webview") obj else null
+                if (!process.isAlive) {
+                    val extra = logTail.toList().takeLast(12).joinToString("\n")
+                    throw IOException(
+                        "Chromium 进程已退出，DevTools 未就绪" +
+                            if (extra.isBlank()) {
+                                lastError?.message?.let { ": $it" }.orEmpty()
+                            } else {
+                                ":\n$extra"
+                            },
+                    )
+                }
+                // Re-probe every iteration: a stale DevToolsActivePort from a
+                // previous crashed instance must not latch onto this loop, the
+                // fresh browser rewrites the file once its socket is live.
+                boundPort = Chromium.parseDevToolsListeningPort(logTail.joinToString("\n")) ?: 0
+                if (boundPort <= 0 && userDataDir != null) {
+                    val file = userDataDir.resolve("DevToolsActivePort")
+                    if (Files.isRegularFile(file)) {
+                        boundPort = runCatching { Chromium.parseDevToolsActivePort(Files.readString(file)) }
+                            .getOrNull()
+                            ?: 0
                     }
-                    val blank = pages.firstOrNull { obj ->
-                        val url = obj.get("url")?.asString.orEmpty()
-                        url == "about:blank" || url.isBlank()
-                    }
-                    val live = pages
-                        .filter { obj ->
+                }
+                if (boundPort > 0) {
+                    try {
+                        val list = httpGet(http, "http://127.0.0.1:$boundPort/json/list")
+                        val pages = JsonParser.parseString(list).asJsonArray.mapNotNull { element ->
+                            val obj = element.asJsonObject
+                            val type = obj.get("type")?.asString.orEmpty()
+                            val ws = obj.get("webSocketDebuggerUrl")?.asString ?: return@mapNotNull null
+                            if (ws == excludeWs) return@mapNotNull null
+                            if (type == "page" || type == "app" || type == "webview") obj else null
+                        }
+                        val blank = pages.firstOrNull { obj ->
                             val url = obj.get("url")?.asString.orEmpty()
-                            url.isNotBlank() &&
-                                url != "about:blank" &&
-                                !url.startsWith("chrome-error://") &&
-                                !url.startsWith("edge-error://")
+                            url == "about:blank" || url.isBlank()
                         }
-                        .maxByOrNull { obj ->
-                            ceui.pixshaft.shared.auth.PixivOAuth.oauthStage(obj.get("url")?.asString)
+                        val live = pages
+                            .filter { obj ->
+                                val url = obj.get("url")?.asString.orEmpty()
+                                url.isNotBlank() &&
+                                    url != "about:blank" &&
+                                    !url.startsWith("chrome-error://") &&
+                                    !url.startsWith("edge-error://")
+                            }
+                            .maxByOrNull { obj ->
+                                ceui.pixshaft.shared.auth.PixivOAuth.oauthStage(obj.get("url")?.asString)
+                            }
+                        val chosen = if (excludeWs == null) {
+                            blank ?: live ?: pages.firstOrNull()
+                        } else {
+                            live ?: blank ?: pages.firstOrNull()
                         }
-                    val chosen = if (excludeWs == null) {
-                        blank ?: live ?: pages.firstOrNull()
-                    } else {
-                        live ?: blank ?: pages.firstOrNull()
+                        chosen?.get("webSocketDebuggerUrl")?.asString?.let { return boundPort to it }
+                        runCatching { httpGet(http, "http://127.0.0.1:$boundPort/json/version") }
+                    } catch (t: Throwable) {
+                        lastError = t
                     }
-                    chosen?.get("webSocketDebuggerUrl")?.asString?.let { return it }
-                    runCatching { httpGet(http, "http://127.0.0.1:$port/json/version") }
-                } catch (t: Throwable) {
-                    lastError = t
                 }
                 Thread.sleep(200)
             }
-            throw IOException("无法连接 Chromium DevTools 端口 $port: ${lastError?.message ?: "超时"}")
+            throw IOException(
+                "无法连接 Chromium DevTools 端口 ${boundPort.takeIf { it > 0 } ?: requestedPort}: " +
+                    (lastError?.message ?: "超时"),
+            )
         }
 
         private fun httpGet(http: OkHttpClient, url: String): String {
@@ -1242,17 +1652,58 @@ object ChromiumHttp {
     private val session = AtomicReference<ChromiumSession?>(null)
     private val forceChromium = ThreadLocal.withInitial { false }
 
+    fun shouldIntercept(host: String): Boolean = host.lowercase() in PixivDns.API_HOSTS
+
+    /**
+     * Application interceptor. Must be installed **after** identity / token
+     * interceptors: this short-circuits API hosts onto a headless Chromium
+     * fetch (QUIC) and never calls later interceptors.
+     */
     val interceptor: Interceptor = Interceptor { chain ->
         val request = chain.request()
         if (forceChromium.get()) {
             return@Interceptor execute(request)
         }
+        val host = request.url.host.lowercase()
+        val api = shouldIntercept(host)
+        if (Chromium.directConnect && api) {
+            return@Interceptor try {
+                execute(request)
+            } catch (error: IOException) {
+                try {
+                    chain.proceed(request)
+                } catch (_: IOException) {
+                    throw error
+                }
+            }
+        }
         try {
             chain.proceed(request)
         } catch (error: IOException) {
-            val host = request.url.host
-            if (!PixivDns.isPinnedHost(host) || host.endsWith("pximg.net")) throw error
+            if (!api) throw error
             execute(request)
+        }
+    }
+
+    fun warmAsync() {
+        thread(name = "chromium-warm", isDaemon = true) {
+            runCatching {
+                execute(
+                    Request.Builder()
+                        .url(Chromium.originWarmupUrl("https://app-api.pixiv.net"))
+                        .get()
+                        .build(),
+                ).close()
+            }.onFailure { CrashLog.write("chromium warm failed: ${it.message}") }
+        }
+    }
+
+    private fun ensure(): ChromiumSession {
+        synchronized(lock) {
+            session.get()?.let { return it }
+            val fresh = ChromiumSession.launchHeadless()
+            session.set(fresh)
+            return fresh
         }
     }
 
@@ -1270,20 +1721,33 @@ object ChromiumHttp {
 
     fun execute(request: Request): Response {
         synchronized(lock) {
+            val op: (ChromiumSession) -> Response =
+                if (Chromium.isTokenPost(request)) {
+                    { it.executeFormPost(request) }
+                } else {
+                    { it.execute(request) }
+                }
             val current = session.get()
             if (current != null) {
                 try {
-                    return current.execute(request)
+                    return op(current)
                 } catch (error: Exception) {
                     CrashLog.write("Chromium session fetch failed: ${error.message}")
+                    runCatching { current.close() }
+                    session.compareAndSet(current, null)
                 }
             }
-            val fresh = ChromiumSession.launchHeadless().also { session.set(it) }
-            return fresh.execute(request)
+            return op(ensure())
         }
     }
 
     fun shutdown() {
+        recycleSession()
+        Chromium.nukeAll()
+    }
+
+    /** Drop the headless fetch browser so the next request relaunches with current proxy / QUIC flags. */
+    fun recycleSession() {
         synchronized(lock) {
             val current = session.getAndSet(null)
             if (current != null) runCatching { current.close() }
@@ -1300,6 +1764,7 @@ internal class CdpClient(private var wsUrl: String) {
     private val failure = AtomicReference<Throwable?>(null)
     private var socket: WebSocket? = null
     private val http = OkHttpClient.Builder()
+        .proxy(java.net.Proxy.NO_PROXY)
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
@@ -1392,9 +1857,9 @@ internal class CdpClient(private var wsUrl: String) {
 
     fun close() {
         failAll(IOException("CDP closed"))
-        runCatching { socket?.close(1000, "bye") }
-        http.dispatcher.executorService.shutdown()
-        http.connectionPool.evictAll()
+        runCatching { socket?.cancel() }
+        runCatching { http.dispatcher.executorService.shutdownNow() }
+        runCatching { http.connectionPool.evictAll() }
     }
 
     private fun handle(text: String) {

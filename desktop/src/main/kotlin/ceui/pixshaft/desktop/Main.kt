@@ -19,12 +19,18 @@ fun main(args: Array<String>) {
     OAuthSchemes.install()
     CrashLog.installDefaultHandler()
     runCatching { java.nio.file.Files.createDirectories(AppPaths.root) }
+    runCatching {
+        val cache = AppPaths.cacheRoot()
+        java.nio.file.Files.createDirectories(cache)
+        System.setProperty("java.io.tmpdir", cache.toAbsolutePath().toString())
+    }
     val incoming = args.firstOrNull { it.contains("://") }
     if (!SingleInstance.claimOrForward(incoming)) return
     Runtime.getRuntime().addShutdownHook(Thread({ shutdownAll() }, "pixshaft-shutdown"))
     runCatching { ProtocolRegistrar.registerCurrentProcess() }
 
     val graph = AppGraph()
+    if (graph.sessionStore.isLoggedIn) ChromiumHttp.warmAsync()
     val stopping = AtomicBoolean(false)
     application {
         val prefs = rememberWindowPrefs()
@@ -33,23 +39,25 @@ fun main(args: Array<String>) {
             position = WindowPosition.Aligned(Alignment.Center),
             size = DpSize(prefs.width.dp, prefs.height.dp),
         )
+        val windowRef = java.util.concurrent.atomic.AtomicReference<java.awt.Window?>(null)
         Window(
             onCloseRequest = {
                 if (!stopping.compareAndSet(false, true)) return@Window
+                runCatching { windowRef.get()?.isVisible = false }
                 runCatching { prefs.save(state.size.width.value, state.size.height.value) }
-                shutdownAll()
                 exitApplication()
-                // Chromium / Compose can leave non-daemon threads; halt after a short delay.
+                // Never wait for Chromium on the EDT — that is the close-lag / white-frame bug.
                 Thread({
-                    Thread.sleep(400)
+                    shutdownAll()
                     Runtime.getRuntime().halt(0)
-                }, "pixshaft-halt").apply { isDaemon = true }.start()
+                }, "pixshaft-halt").start()
             },
             title = "PixShaft",
             icon = icon,
             state = state,
         ) {
             val awtWindow = window
+            windowRef.set(awtWindow)
             DisposableEffect(awtWindow) {
                 val focus = {
                     EventQueue.invokeLater {
@@ -64,7 +72,7 @@ fun main(args: Array<String>) {
                 SingleInstance.onFocus(focus)
                 onDispose { SingleInstance.removeFocus(focus) }
             }
-            ShaftApp(graph, incoming)
+            ShaftApp(graph, incoming, state)
         }
     }
 }
@@ -74,5 +82,6 @@ private val shutdownOnce = AtomicBoolean(false)
 private fun shutdownAll() {
     if (!shutdownOnce.compareAndSet(false, true)) return
     runCatching { ChromiumHttp.shutdown() }
+    runCatching { Chromium.nukeAll() }
     runCatching { SingleInstance.release() }
 }

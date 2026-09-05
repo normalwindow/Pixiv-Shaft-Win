@@ -4,14 +4,19 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -19,54 +24,49 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import ceui.pixshaft.desktop.AppGraph
 import ceui.pixshaft.shared.model.Illust
-import ceui.pixshaft.shared.model.UserDetail
+import ceui.pixshaft.shared.net.userMessage
 import coil3.ImageLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** 其它用户页：资料头 + 插画 / 漫画 / 关注（收藏）三个页签。 */
 @Composable
 fun UserScreen(
     graph: AppGraph,
     userId: Long,
     loader: ImageLoader,
+    snackbar: SnackbarHostState,
     onOpenIllust: (Illust) -> Unit,
 ) {
-    var detail by remember(userId) { mutableStateOf<UserDetail?>(null) }
-    var works by remember(userId) { mutableStateOf<List<Illust>>(emptyList()) }
-    var next by remember(userId) { mutableStateOf<String?>(null) }
-    var loading by remember(userId) { mutableStateOf(true) }
-    var error by remember(userId) { mutableStateOf<String?>(null) }
+    var detail by remember(userId) { mutableStateOf<ceui.pixshaft.shared.model.UserDetail?>(null) }
+    var detailLoading by remember(userId) { mutableStateOf(true) }
+    var tab by rememberSaveable(userId) { mutableStateOf(0) }
+    var bookmarkRestrict by rememberSaveable(userId) { mutableStateOf("public") }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(userId) {
-        loading = true
-        runCatching {
-            withContext(Dispatchers.IO) {
-                val d = graph.client.api.userDetail(userId)
-                val list = graph.client.api.userIllusts(userId)
-                Triple(d, list.illusts, list.next_url)
-            }
-        }.onSuccess { (d, list, n) ->
-            detail = d
-            works = list
-            next = n
-        }.onFailure { error = it.message }
-        loading = false
+        detailLoading = true
+        runCatching { withContext(Dispatchers.IO) { graph.client.api.userDetail(userId) } }
+            .onSuccess { detail = it }
+            .onFailure { snackbar.showSnackbar(it.userMessage()) }
+        detailLoading = false
     }
 
     Column(Modifier.fillMaxSize()) {
         val user = detail?.user
         val profile = detail?.profile
         Row(
-            Modifier.padding(20.dp),
+            Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             PixivImage(
@@ -74,7 +74,7 @@ fun UserScreen(
                 contentDescription = user?.name,
                 modifier = Modifier.size(72.dp).clip(CircleShape),
                 loader = loader,
-                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                contentScale = ContentScale.Crop,
             )
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -88,7 +88,7 @@ fun UserScreen(
                 )
                 if (!user?.comment.isNullOrBlank()) {
                     Spacer(Modifier.height(6.dp))
-                    Text(user!!.comment!!, style = MaterialTheme.typography.bodyMedium, maxLines = 4)
+                    Text(user!!.comment!!, style = MaterialTheme.typography.bodyMedium, maxLines = 3)
                 }
             }
             val followed = user?.is_followed == true
@@ -96,35 +96,94 @@ fun UserScreen(
                 OutlinedButton(onClick = {
                     scope.launch {
                         runCatching { withContext(Dispatchers.IO) { graph.client.api.unfollowUser(userId) } }
-                        detail = detail?.copy(user = user?.copy(is_followed = false))
+                            .onSuccess { detail = detail?.copy(user = user?.copy(is_followed = false)) }
+                            .onFailure { snackbar.showSnackbar(it.userMessage()) }
                     }
                 }) { Text("已关注") }
             } else {
                 Button(onClick = {
                     scope.launch {
-                        runCatching { withContext(Dispatchers.IO) { graph.client.api.followUser(userId) } }
-                        detail = detail?.copy(user = user?.copy(is_followed = true))
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                graph.client.api.followUser(
+                                    userId,
+                                    if (graph.settings.current.privateFollow) "private" else "public",
+                                )
+                            }
+                        }
+                            .onSuccess { detail = detail?.copy(user = user?.copy(is_followed = true)) }
+                            .onFailure { snackbar.showSnackbar(it.userMessage()) }
                     }
                 }) { Text("关注") }
             }
         }
-        IllustWaterfall(
-            illusts = works,
-            loading = loading,
-            error = error,
-            loader = loader,
-            onOpen = onOpenIllust,
-            onLoadMore = {
-                val url = next ?: return@IllustWaterfall
-                scope.launch {
-                    runCatching {
-                        withContext(Dispatchers.IO) { graph.client.api.nextIllusts(url) }
-                    }.onSuccess {
-                        works = works + it.illusts
-                        next = it.next_url
+        TabRow(selectedTabIndex = tab) {
+            listOf("插画", "漫画", "关注").forEachIndexed { index, label ->
+                Tab(selected = tab == index, onClick = { tab = index }, text = { Text(label) })
+            }
+        }
+        when (tab) {
+            0 -> UserWorksFeed(
+                graph = graph,
+                userId = userId,
+                loader = loader,
+                type = "illust",
+                cacheKey = "user-illusts:$userId",
+                onOpenIllust = onOpenIllust,
+            )
+            1 -> UserWorksFeed(
+                graph = graph,
+                userId = userId,
+                loader = loader,
+                type = "manga",
+                cacheKey = "user-manga:$userId",
+                onOpenIllust = onOpenIllust,
+            )
+            else -> Column(Modifier.fillMaxSize()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+                ) {
+                    listOf("public" to "公开", "private" to "私人").forEach { (value, label) ->
+                        FilterChip(
+                            selected = bookmarkRestrict == value,
+                            onClick = { bookmarkRestrict = value },
+                            label = { Text(label) },
+                        )
                     }
                 }
-            },
-        )
+                val uid = userId
+                SimpleFeedPage(
+                    graph = graph,
+                    loader = loader,
+                    load = { graph.client.api.userBookmarks(uid, bookmarkRestrict) },
+                    onOpen = onOpenIllust,
+                    loadMore = { url -> graph.client.api.nextIllusts(url) },
+                    key = bookmarkRestrict,
+                    cacheKey = "user-bookmarks:$uid:$bookmarkRestrict",
+                    gridKey = bookmarkRestrict,
+                )
+            }
+        }
     }
+}
+
+@Composable
+private fun UserWorksFeed(
+    graph: AppGraph,
+    userId: Long,
+    loader: ImageLoader,
+    type: String,
+    cacheKey: String,
+    onOpenIllust: (Illust) -> Unit,
+) {
+    SimpleFeedPage(
+        graph = graph,
+        loader = loader,
+        load = { graph.client.api.userIllusts(userId, type) },
+        onOpen = onOpenIllust,
+        loadMore = { url -> graph.client.api.nextIllusts(url) },
+        cacheKey = cacheKey,
+        gridKey = cacheKey,
+    )
 }

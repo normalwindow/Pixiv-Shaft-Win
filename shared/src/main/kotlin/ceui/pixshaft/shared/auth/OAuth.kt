@@ -203,4 +203,4 @@ class DesktopOAuth(
     }
 }
 
-class OAuthException(message: String) : RuntimeException(message)
+class OAuthException(message: String, cause: Throwable? = null) : RuntimeException(message, cause)
