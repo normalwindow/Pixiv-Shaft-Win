@@ -1,6 +1,7 @@
 package ceui.pixshaft.desktop.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -26,8 +28,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -36,8 +43,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -91,12 +100,23 @@ fun ImagePreviewOverlay(
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
     var hintVisible by remember(request) { mutableStateOf(true) }
     var hintTick by remember(request) { mutableIntStateOf(0) }
+    var chromeVisible by remember(request) { mutableStateOf(true) }
     LaunchedEffect(hintTick) {
         if (hintTick > 0) {
             kotlinx.coroutines.delay(4000)
             hintVisible = false
         }
     }
+    // 顶栏 / 箭头 / 缩略图：3 秒无鼠标活动自动隐藏，移动鼠标即重现
+    var moveTick by remember(request) { mutableIntStateOf(0) }
+    LaunchedEffect(moveTick) {
+        if (moveTick > 0) {
+            chromeVisible = true
+            kotlinx.coroutines.delay(3000)
+            chromeVisible = false
+        }
+    }
+    val chromeAlpha by animateFloatAsState(if (chromeVisible) 1f else 0f, label = "chrome")
 
     fun poke() {
         hintVisible = true
@@ -128,6 +148,22 @@ fun ImagePreviewOverlay(
             Modifier
                 .fillMaxSize()
                 .onSizeChanged { boxSize = it }
+                .pointerInput(request) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Move) {
+                                chromeVisible = true
+                                moveTick++
+                            }
+                        }
+                    }
+                }
+                .pointerInput(request) {
+                    detectTapGestures(onDoubleTap = { pos ->
+                        if (scale > 1.05f) zoomTo(pos, 1f / scale) else zoomTo(pos, 2.5f)
+                    })
+                }
                 .pointerInput(request) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         zoomTo(centroid, zoom)
@@ -168,10 +204,23 @@ fun ImagePreviewOverlay(
             )
         }
 
+        Box(
+            Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(96.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.55f),
+                        1f to Color.Transparent,
+                    ),
+                ),
+        )
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp)
+                .alpha(chromeAlpha),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
@@ -183,13 +232,17 @@ fun ImagePreviewOverlay(
                         maxLines = 1,
                     )
                 }
-                if (request.urls.size > 1) {
-                    Text(
-                        "${index + 1} / ${request.urls.size}",
-                        color = Color.White.copy(alpha = 0.72f),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
+                Text(
+                    buildString {
+                        if (request.urls.size > 1) append("${index + 1} / ${request.urls.size}")
+                        if (scale > 1.05f) {
+                            if (isNotEmpty()) append("  ·  ")
+                            append((scale * 100).toInt().toString() + "%")
+                        }
+                    },
+                    color = Color.White.copy(alpha = 0.72f),
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             Surface(
                 shape = CircleShape,
@@ -209,7 +262,8 @@ fun ImagePreviewOverlay(
                 modifier = Modifier
                     .align(Alignment.CenterStart)
                     .padding(14.dp)
-                    .size(44.dp),
+                    .size(44.dp)
+                    .alpha(chromeAlpha),
             ) {
                 IconButton(onClick = { poke(); index = (index - 1).coerceAtLeast(0) }, enabled = index > 0) {
                     Icon(
@@ -225,7 +279,8 @@ fun ImagePreviewOverlay(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(14.dp)
-                    .size(44.dp),
+                    .size(44.dp)
+                    .alpha(chromeAlpha),
             ) {
                 IconButton(
                     onClick = { poke(); index = (index + 1).coerceAtMost(request.urls.lastIndex) },
@@ -238,11 +293,25 @@ fun ImagePreviewOverlay(
                     )
                 }
             }
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(96.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            1f to Color.Black.copy(alpha = 0.55f),
+                        ),
+                    )
+                    .alpha(chromeAlpha),
+            )
             Row(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 14.dp)
-                    .horizontalScroll(rememberScrollState()),
+                    .horizontalScroll(rememberScrollState())
+                    .alpha(chromeAlpha),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Spacer(Modifier.size(10.dp))
@@ -278,14 +347,19 @@ fun ImagePreviewOverlay(
             enter = androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.fadeOut(),
         ) {
-        Text(
-            "滚轮缩放 · 拖动平移 · Esc 关闭",
-            color = Color.White.copy(alpha = 0.55f),
-            style = MaterialTheme.typography.labelSmall,
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(14.dp),
-        )
+        AnimatedVisibility(
+            visible = hintVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomStart),
+        ) {
+            Text(
+                "滚轮缩放 · 双击放大 · 拖动平移 · Esc 关闭",
+                color = Color.White.copy(alpha = 0.55f),
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(14.dp),
+            )
+        }
         }
     }
 }

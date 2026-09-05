@@ -156,6 +156,7 @@ class DownloadQueue(
                 },
             )
         }.onSuccess {
+            graph.downloaded.mark(job.illustId)
             val i = jobs.indexOfFirst { it.id == job.id }
             if (i >= 0) jobs[i] = jobs[i].copy(status = "done", finished = job.urls.size, total = job.urls.size)
             if (graph.settings.current.autoPostLikeWhenDownload) {

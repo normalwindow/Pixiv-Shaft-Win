@@ -14,6 +14,9 @@ val LocalDesktopSettings = staticCompositionLocalOf { DesktopSettings() }
 /** 瀑布流无极缩放：1f = 默认，Ctrl+滚轮 / 双指捏合调整。 */
 val LocalFeedZoom = staticCompositionLocalOf { androidx.compose.runtime.mutableFloatStateOf(1f) }
 
+/** 已下载的作品 ID 集合（卡片角标）。 */
+val LocalDownloadedIds = staticCompositionLocalOf<Set<Long>> { emptySet() }
+
 data class BrowseChrome(
     val selectedId: Long? = null,
     val split: Boolean = false,

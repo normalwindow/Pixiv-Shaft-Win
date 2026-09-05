@@ -88,6 +88,7 @@ fun ArtworkScreen(
 ) {
     var illust by remember(id) { mutableStateOf<Illust?>(null) }
     var related by remember(id) { mutableStateOf<List<Illust>>(emptyList()) }
+    var authorWorks by remember(id) { mutableStateOf<List<Illust>>(emptyList()) }
     var error by remember(id) { mutableStateOf<String?>(null) }
     var loading by remember(id) { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
@@ -107,6 +108,14 @@ fun ArtworkScreen(
             illust = item
             related = rel
             if (graph.settings.current.saveViewHistory) graph.history.record(item)
+            // 作者其它作品（与相关作品同样的横滑样式）
+            item.user?.id?.let { uid ->
+                runCatching {
+                    withContext(Dispatchers.IO) { graph.client.api.userIllusts(uid, "illust").illusts }
+                }.onSuccess { list ->
+                    authorWorks = list.uniqueIllusts().filterNot { it.id == item.id }
+                }
+            }
         }.onFailure { error = it.userMessage() }
         loading = false
     }
@@ -193,6 +202,7 @@ fun ArtworkScreen(
                         imageCollapsed = imageCollapsed,
                         onToggleImageCollapsed = { imageCollapsed = !imageCollapsed },
                         related = related,
+                        authorWorks = authorWorks,
                         bookmarked = item.isBookmarked,
                         onToggleBookmark = ::toggleBookmark,
                         onDownload = ::download,
@@ -316,8 +326,6 @@ fun ArtworkScreen(
                             }
                             Spacer(Modifier.height(8.dp))
                             CopyableMeta(item, snackbar, scope)
-                            CommentsSection(graph, id, loader, Modifier.padding(top = 12.dp))
-                            Spacer(Modifier.height(8.dp))
                             RelatedStrip(
                                 related = related,
                                 illustId = item.id,
@@ -325,6 +333,17 @@ fun ArtworkScreen(
                                 onOpenIllust = onOpenIllust,
                                 onOpenRelated = onOpenRelated,
                             )
+                            item.user?.id?.let { uid ->
+                                RelatedStrip(
+                                    related = authorWorks,
+                                    illustId = uid,
+                                    loader = loader,
+                                    onOpenIllust = onOpenIllust,
+                                    onOpenRelated = onOpenUser,
+                                    title = "作者作品",
+                                )
+                            }
+                            CommentsSection(graph, id, loader, Modifier.padding(top = 12.dp))
                         }
                     }
                 }
@@ -559,6 +578,7 @@ private fun PhoneDetailLayout(
     imageCollapsed: Boolean,
     onToggleImageCollapsed: () -> Unit,
     related: List<Illust>,
+    authorWorks: List<Illust>,
     bookmarked: Boolean,
     onToggleBookmark: () -> Unit,
     onDownload: () -> Unit,
@@ -748,7 +768,6 @@ private fun PhoneDetailLayout(
             )
         }
         CopyableMeta(item, snackbar, scope)
-        CommentsSection(graph, item.id, loader, Modifier.padding(horizontal = 16.dp))
         RelatedStrip(
             related = related,
             illustId = item.id,
@@ -757,6 +776,18 @@ private fun PhoneDetailLayout(
             onOpenRelated = onOpenRelated,
             modifier = Modifier.padding(horizontal = 16.dp),
         )
+        item.user?.id?.let { uid ->
+            RelatedStrip(
+                related = authorWorks,
+                illustId = uid,
+                loader = loader,
+                onOpenIllust = onOpenIllust,
+                onOpenRelated = onOpenUser,
+                title = "作者作品",
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+        CommentsSection(graph, item.id, loader, Modifier.padding(horizontal = 16.dp))
     }
 }
 
@@ -776,7 +807,7 @@ private fun CommentsSection(graph: AppGraph, id: Long, loader: ImageLoader, modi
     if (shown.isEmpty()) return
     Column(modifier) {
         Text("评论 (${shown.size})", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(10.dp))
         shown.take(20).forEach { comment ->
             Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
                 PixivImage(
@@ -784,16 +815,39 @@ private fun CommentsSection(graph: AppGraph, id: Long, loader: ImageLoader, modi
                     contentDescription = comment.user?.name,
                     loader = loader,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(28.dp).clip(CircleShape),
+                    modifier = Modifier.size(34.dp).clip(CircleShape),
                 )
-                Spacer(Modifier.width(8.dp))
-                Column {
-                    Text(
-                        comment.user?.name.orEmpty(),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(comment.comment.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.width(10.dp))
+                Surface(
+                    shape = RoundedCornerShape(
+                        topStart = 4.dp,
+                        topEnd = 12.dp,
+                        bottomStart = 12.dp,
+                        bottomEnd = 12.dp,
+                    ),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                comment.user?.name.orEmpty(),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            comment.date?.let { date ->
+                                Text(
+                                    date.substringBefore('T'),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Text(stripHtml(comment.comment.orEmpty()), style = MaterialTheme.typography.bodySmall)
+                    }
                 }
             }
         }
@@ -802,6 +856,7 @@ private fun CommentsSection(graph: AppGraph, id: Long, loader: ImageLoader, modi
                 "仅显示前 20 条评论",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp),
             )
         }
     }
@@ -815,11 +870,12 @@ private fun RelatedStrip(
     onOpenIllust: (Long) -> Unit,
     onOpenRelated: (Long) -> Unit,
     modifier: Modifier = Modifier,
+    title: String = "相关作品",
 ) {
     if (related.isEmpty()) return
     Column(modifier) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("相关作品", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = { onOpenRelated(illustId) }) { Text("查看全部") }
         }
         Spacer(Modifier.height(8.dp))

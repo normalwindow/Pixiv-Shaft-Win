@@ -46,6 +46,7 @@ class AppGraph {
     val feedStore = FeedStore()
     val features = IllustListStore(AppPaths.featureFile, gson)
     val batch = IllustListStore(AppPaths.batchFile, gson)
+    val downloaded = DownloadedStore(this)
 
     @Volatile private var loginReturn: LoginReturnChannel? = null
     @Volatile private var loginSession: ChromiumSession? = null

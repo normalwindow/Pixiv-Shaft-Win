@@ -212,3 +212,27 @@ class IllustListStore(
         }
     }
 }
+
+/** 本地已下载作品检测：启动扫描下载目录，下载完成后即时补标。 */
+class DownloadedStore(private val graph: AppGraph) {
+    var ids by mutableStateOf<Set<Long>>(emptySet())
+        private set
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    init {
+        scan()
+    }
+
+    fun scan() {
+        scope.launch {
+            val found = runCatching { LibraryScanner.scan(graph.settings.current).map { it.id } }
+                .getOrDefault(emptyList())
+            ids = found.toSet()
+        }
+    }
+
+    fun mark(id: Long) {
+        ids = ids + id
+    }
+}

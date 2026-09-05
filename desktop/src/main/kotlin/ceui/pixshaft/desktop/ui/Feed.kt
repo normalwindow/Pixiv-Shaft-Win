@@ -139,6 +139,13 @@ fun IllustWaterfall(
             else -> (maxWidth.value * zoom / if (ui.compactUi) 150f else 180f).toInt().coerceIn(1, 12)
         }
         val state = rememberLazyStaggeredGridState()
+        // 返回缓存页时，把恢复的滚动位置对齐到条目起点：
+        // staggered 网格在“视口上方存在未测量变高条目”时上滑会重排乱窜，对齐后即稳定。
+        LaunchedEffect(gridKey, unique.isNotEmpty()) {
+            if (unique.isNotEmpty() && state.firstVisibleItemIndex > 0 && state.firstVisibleItemScrollOffset != 0) {
+                state.scrollToItem(state.firstVisibleItemIndex)
+            }
+        }
         LaunchedEffect(state, unique.size, loadingMore) {
             if (onLoadMore == null) return@LaunchedEffect
             snapshotFlow { state.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0 }
@@ -358,6 +365,7 @@ private fun IllustPoster(
 ) {
     val policy = LocalImagePolicy.current
     val ui = LocalDesktopSettings.current
+    val downloadedIds = LocalDownloadedIds.current
     val selected = LocalBrowseChrome.current.selectedId == illust.id
     val radius = if (ui.compactUi || compact) 10.dp else 14.dp
     var menuOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
@@ -397,11 +405,12 @@ private fun IllustPoster(
                     ),
                 )
             }
-            if (illust.page_count > 1 || illust.isR18() || illust.isAi()) {
+            if (illust.page_count > 1 || illust.isR18() || illust.isAi() || downloadedIds.contains(illust.id)) {
                 Row(
                     Modifier.align(Alignment.TopEnd).padding(8.dp),
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
+                    if (downloadedIds.contains(illust.id)) BadgeChip("已下载")
                     if (illust.page_count > 1) BadgeChip("${illust.page_count}P")
                     if (illust.isR18()) BadgeChip("R-18")
                     if (illust.isAi()) BadgeChip("AI")
@@ -480,8 +489,8 @@ private fun Modifier.onPointerSecondaryPress(action: () -> Unit): Modifier =
 @Composable
 private fun BadgeChip(text: String) {
     Surface(
-        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.55f),
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        color = Color(0xCC000000),
+        contentColor = Color.White,
         shape = RoundedCornerShape(6.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))

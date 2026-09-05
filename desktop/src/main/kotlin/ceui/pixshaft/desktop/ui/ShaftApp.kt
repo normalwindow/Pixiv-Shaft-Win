@@ -165,6 +165,7 @@ fun ShaftApp(graph: AppGraph, initialUri: String?, windowState: WindowState) {
             LocalImagePreview provides imagePreview,
             LocalFeedZoom provides feedZoom,
             LocalAppLocale provides graph.settings.current.appLocale,
+            LocalDownloadedIds provides graph.downloaded.ids,
         ) {
             Surface(Modifier.fillMaxSize()) {
                 if (!loggedIn) {
