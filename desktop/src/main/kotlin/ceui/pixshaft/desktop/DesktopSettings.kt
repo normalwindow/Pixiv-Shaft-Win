@@ -66,6 +66,7 @@ data class DesktopSettings(
     val useArtworkV3: Boolean = false,
     val detailPanelCollapsedByDefault: Boolean = false,
     val detailStyle: Int = 0, // 0 默认模式 1 手机原样模式
+    val customTitleBar: Boolean = true, // 自绘标题栏（默认开；切换时重建窗口）
     // 收藏
     val privateStar: Boolean = false,
     val privateFollow: Boolean = false,
@@ -156,7 +157,12 @@ class SettingsStore(private val gson: Gson = Gson()) {
         return runCatching {
             val text = Files.readString(AppPaths.settingsFile)
             val parsed = gson.fromJson(text, DesktopSettings::class.java) ?: DesktopSettings()
-            if (!text.contains("\"directConnect\"")) parsed.copy(directConnect = true) else parsed
+            var next = parsed
+            if (!text.contains("\"directConnect\"")) next = next.copy(directConnect = true)
+            if (!text.contains("\"customTitleBar\"")) next = next.copy(customTitleBar = true)
+            if (!text.contains("\"browseLayout\"")) next = next.copy(browseLayout = 0)
+            if (!text.contains("\"detailStyle\"")) next = next.copy(detailStyle = 0)
+            next
         }.getOrDefault(DesktopSettings())
     }
 

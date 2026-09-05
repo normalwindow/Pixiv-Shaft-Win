@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -63,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import ceui.pixshaft.desktop.AppGraph
+import ceui.pixshaft.desktop.FeatureColumn
 import ceui.pixshaft.shared.model.Comment
 import ceui.pixshaft.shared.model.Illust
 import ceui.pixshaft.shared.net.userMessage
@@ -101,7 +104,12 @@ fun ArtworkScreen(
             withContext(Dispatchers.IO) {
                 val detail = graph.client.api.illustDetail(id).illust
                     ?: error("作品不存在")
-                val rel = runCatching { graph.client.api.related(id).illusts }.getOrDefault(emptyList())
+                val first = runCatching { graph.client.api.related(id) }.getOrNull()
+                val more = first?.next_url?.let { url ->
+                    runCatching { graph.client.api.nextIllusts(url) }.getOrNull()
+                }
+                val rel = ((first?.illusts ?: emptyList()) + (more?.illusts ?: emptyList()))
+                    .distinctBy { it.id }
                 detail to rel
             }
         }.onSuccess { (item, rel) ->
@@ -176,14 +184,11 @@ fun ArtworkScreen(
                 scope.launch { snackbar.showSnackbar("已加入下载队列") }
             }
 
-            fun addBatch() {
-                graph.batch.add(item)
-                scope.launch { snackbar.showSnackbar("已加入批量下载清单") }
-            }
-
-            fun addFeature() {
-                graph.features.add(item)
-                scope.launch { snackbar.showSnackbar("已收入精华列") }
+            fun addAuthorColumn() {
+                val uid = item.user?.id ?: return
+                val name = item.user?.name ?: "uid $uid"
+                graph.features.add(FeatureColumn.author(uid, name))
+                scope.launch { snackbar.showSnackbar("已把「$name 的作品」收入精华列") }
             }
 
             fun openPreview() {
@@ -220,8 +225,7 @@ fun ArtworkScreen(
                         menuActions = DetailMenuActions(
                             onToggleBookmark = ::toggleBookmark,
                             onDownload = ::download,
-                            onAddBatch = ::addBatch,
-                            onAddFeature = ::addFeature,
+                            onAddAuthorColumn = ::addAuthorColumn,
                             onCopyIllustId = { copySnackbar(snackbar, scope, item.id.toString()) },
                             onCopyUserId = { item.user?.id?.let { copySnackbar(snackbar, scope, it.toString()) } },
                             onOpenInBrowser = {
@@ -256,33 +260,33 @@ fun ArtworkScreen(
                             Text(item.title ?: "#${item.id}", style = MaterialTheme.typography.headlineSmall)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 AuthorRow(item, loader, onOpenUser, Modifier.weight(1f))
-                                IconButton(onClick = { menuOpen = true }) {
-                                    Icon(Icons.Outlined.MoreVert, contentDescription = "菜单")
+                                Box {
+                                    IconButton(onClick = { menuOpen = true }) {
+                                        Icon(Icons.Outlined.MoreVert, contentDescription = "菜单")
+                                    }
+                                    IllustDetailMenu(
+                                        expanded = menuOpen,
+                                        onDismiss = { menuOpen = false },
+                                        bookmarked = item.isBookmarked,
+                                        actions = DetailMenuActions(
+                                            onToggleBookmark = ::toggleBookmark,
+                                            onDownload = ::download,
+                                            onAddAuthorColumn = ::addAuthorColumn,
+                                            onCopyIllustId = { copySnackbar(snackbar, scope, item.id.toString()) },
+                                            onCopyUserId = { item.user?.id?.let { copySnackbar(snackbar, scope, it.toString()) } },
+                                            onOpenInBrowser = {
+                                                runCatching {
+                                                    java.awt.Desktop.getDesktop().browse(java.net.URI("https://www.pixiv.net/artworks/${item.id}"))
+                                                }
+                                            },
+                                            onOpenManga = if (item.isManga()) ({ onOpenManga(item.id) }) else null,
+                                            onExpand = onExpand.takeIf { embedded },
+                                            onTogglePanel = { showPanel = !showPanel },
+                                        ),
+                                        showPanel = showPanel,
+                                    )
                                 }
                             }
-                            IllustDetailMenu(
-                                expanded = menuOpen,
-                                onDismiss = { menuOpen = false },
-                                bookmarked = item.isBookmarked,
-                                actions = DetailMenuActions(
-                                    onToggleBookmark = ::toggleBookmark,
-                                    onDownload = ::download,
-                                    onAddBatch = ::addBatch,
-                                    onAddFeature = ::addFeature,
-                                    onCopyIllustId = { copySnackbar(snackbar, scope, item.id.toString()) },
-                                    onCopyUserId = { item.user?.id?.let { copySnackbar(snackbar, scope, it.toString()) } },
-                                    onOpenInBrowser = {
-                                        runCatching {
-                                            java.awt.Desktop.getDesktop().browse(java.net.URI("https://www.pixiv.net/artworks/${item.id}"))
-                                        }
-                                    },
-                                    onOpenManga = if (item.isManga()) ({ onOpenManga(item.id) }) else null,
-                                    onExpand = onExpand.takeIf { embedded },
-                                    onTogglePanel = { showPanel = !showPanel },
-                                    onToggleImageCollapsed = null,
-                                ),
-                                showPanel = showPanel,
-                            )
                             Spacer(Modifier.height(8.dp))
                             Text(
                                 "${item.total_bookmarks ?: 0} 收藏 · ${item.total_view ?: 0} 浏览 · ${item.create_date?.substringBefore('T').orEmpty()}",
@@ -356,8 +360,7 @@ fun ArtworkScreen(
 data class DetailMenuActions(
     val onToggleBookmark: () -> Unit,
     val onDownload: () -> Unit,
-    val onAddBatch: () -> Unit,
-    val onAddFeature: () -> Unit,
+    val onAddAuthorColumn: () -> Unit,
     val onCopyIllustId: () -> Unit,
     val onCopyUserId: () -> Unit,
     val onOpenInBrowser: () -> Unit,
@@ -381,8 +384,7 @@ private fun IllustDetailMenu(
             onClick = { actions.onToggleBookmark(); onDismiss() },
         )
         DropdownMenuItem(text = { Text("下载") }, onClick = { actions.onDownload; onDismiss() })
-        DropdownMenuItem(text = { Text("加入批量下载") }, onClick = { actions.onAddBatch; onDismiss() })
-        DropdownMenuItem(text = { Text("收入精华列") }, onClick = { actions.onAddFeature; onDismiss() })
+        DropdownMenuItem(text = { Text("把作者作品收入精华列") }, onClick = { actions.onAddAuthorColumn(); onDismiss() })
         actions.onOpenManga?.let {
             DropdownMenuItem(text = { Text("漫画阅读器") }, onClick = { it(); onDismiss() })
         }
@@ -465,7 +467,12 @@ private fun IllustPager(
             contentDescription = item.title,
             contentScale = ContentScale.FillWidth,
             loader = loader,
-            modifier = Modifier.fillMaxWidth().clickable { onPreview() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) { onPreview() },
         )
         return
     }
@@ -477,7 +484,12 @@ private fun IllustPager(
                 contentDescription = "${item.title} 第 ${current + 1} 页",
                 contentScale = ContentScale.FillWidth,
                 loader = loader,
-                modifier = Modifier.fillMaxWidth().clickable { onPreview() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) { onPreview() },
             )
             Surface(
                 shape = RoundedCornerShape(10.dp),
@@ -794,21 +806,113 @@ private fun PhoneDetailLayout(
 @Composable
 private fun CommentsSection(graph: AppGraph, id: Long, loader: ImageLoader, modifier: Modifier = Modifier) {
     var comments by remember(id) { mutableStateOf<List<Comment>>(emptyList()) }
+    var nextUrl by remember(id) { mutableStateOf<String?>(null) }
+    var loadingComments by remember(id) { mutableStateOf(true) }
+    var loadingMore by remember(id) { mutableStateOf(false) }
+    var loadError by remember(id) { mutableStateOf<String?>(null) }
+    var draft by remember(id) { mutableStateOf("") }
+    var sending by remember(id) { mutableStateOf(false) }
+    var sendError by remember(id) { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+
     LaunchedEffect(id) {
+        loadingComments = true
+        loadError = null
         runCatching {
-            withContext(Dispatchers.IO) { graph.client.api.comments(id).comments }
-        }.onSuccess { comments = it }
+            withContext(Dispatchers.IO) { graph.client.api.comments(id) }
+        }.onSuccess {
+            comments = it.comments
+            nextUrl = it.next_url
+        }.onFailure {
+            loadError = it.userMessage()
+        }
+        loadingComments = false
     }
     val shown = if (graph.settings.current.filterComment) {
         comments.filterNot { looksLikeSpam(it.comment) }
     } else {
         comments
     }
-    if (shown.isEmpty()) return
     Column(modifier) {
-        Text("评论 (${shown.size})", style = MaterialTheme.typography.titleMedium)
+        Text(
+            when {
+                loadingComments -> "评论加载中…"
+                loadError != null && comments.isEmpty() -> "评论"
+                shown.isEmpty() -> "暂无评论"
+                else -> "评论 (${shown.size})"
+            },
+            style = MaterialTheme.typography.titleMedium,
+        )
+        if (loadError != null) {
+            Text(
+                loadError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        loadingComments = true
+                        loadError = null
+                        runCatching {
+                            withContext(Dispatchers.IO) { graph.client.api.comments(id) }
+                        }.onSuccess {
+                            comments = it.comments
+                            nextUrl = it.next_url
+                        }.onFailure { loadError = it.userMessage() }
+                        loadingComments = false
+                    }
+                },
+            ) { Text("重试") }
+        }
         Spacer(Modifier.height(10.dp))
-        shown.take(20).forEach { comment ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = draft,
+                onValueChange = { draft = it; sendError = null },
+                modifier = Modifier.weight(1f),
+                enabled = !sending,
+                singleLine = false,
+                maxLines = 4,
+                placeholder = { Text("写下评论…") },
+            )
+            Spacer(Modifier.width(8.dp))
+            FilledTonalButton(
+                onClick = {
+                    val text = draft.trim()
+                    if (text.isBlank() || sending) return@FilledTonalButton
+                    sending = true
+                    sendError = null
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) { graph.client.api.postIllustComment(id, text) }
+                        }.onSuccess { resp ->
+                            val posted = resp.comment ?: Comment(
+                                id = System.currentTimeMillis(),
+                                comment = text,
+                                date = java.time.OffsetDateTime.now().toString(),
+                                user = graph.sessionStore.user,
+                            )
+                            comments = listOf(posted) + comments
+                            draft = ""
+                        }.onFailure { sendError = it.userMessage() }
+                        sending = false
+                    }
+                },
+                enabled = !sending && draft.isNotBlank(),
+            ) { Text(if (sending) "发送中" else "发送") }
+        }
+        if (sendError != null) {
+            Text(
+                sendError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        shown.forEach { comment ->
             Row(Modifier.padding(vertical = 6.dp), verticalAlignment = Alignment.Top) {
                 PixivImage(
                     url = comment.user?.avatar(),
@@ -846,18 +950,40 @@ private fun CommentsSection(graph: AppGraph, id: Long, loader: ImageLoader, modi
                                 )
                             }
                         }
-                        Text(stripHtml(comment.comment.orEmpty()), style = MaterialTheme.typography.bodySmall)
+                        val body = stripHtml(comment.bodyText())
+                        if (body.isNotBlank()) {
+                            Text(body, style = MaterialTheme.typography.bodySmall)
+                        }
+                        comment.stamp?.stamp_url?.takeIf { it.isNotBlank() }?.let { stampUrl ->
+                            PixivImage(
+                                url = stampUrl,
+                                contentDescription = "stamp",
+                                loader = loader,
+                                modifier = Modifier.padding(top = 6.dp).size(48.dp),
+                            )
+                        }
                     }
                 }
             }
         }
-        if (comments.size > 20) {
-            Text(
-                "仅显示前 20 条评论",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 6.dp),
-            )
+        if (!nextUrl.isNullOrBlank()) {
+            TextButton(
+                onClick = {
+                    val url = nextUrl ?: return@TextButton
+                    if (loadingMore) return@TextButton
+                    loadingMore = true
+                    scope.launch {
+                        runCatching {
+                            withContext(Dispatchers.IO) { graph.client.api.nextComments(url) }
+                        }.onSuccess {
+                            comments = comments + it.comments
+                            nextUrl = it.next_url
+                        }.onFailure { loadError = it.userMessage() }
+                        loadingMore = false
+                    }
+                },
+                enabled = !loadingMore,
+            ) { Text(if (loadingMore) "加载中…" else "更多评论") }
         }
     }
 }
@@ -883,7 +1009,7 @@ private fun RelatedStrip(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            related.take(20).forEach { rel ->
+            related.take(30).forEach { rel ->
                 Column(
                     Modifier.width(124.dp).clickable { onOpenIllust(rel.id) },
                     verticalArrangement = Arrangement.spacedBy(4.dp),

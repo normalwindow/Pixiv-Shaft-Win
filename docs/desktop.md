@@ -44,8 +44,9 @@ $env:WIX_PATH = (Resolve-Path "build\wix311\tools").Path   # 含 light.exe / can
 
 产物：
 
-- `desktop/build/compose/binaries/main-release/exe/PixShaft-0.1.0.exe`
-- `desktop/build/compose/binaries/main-release/msi/PixShaft-0.1.0.msi`
-- `desktop/build/compose/binaries/main-release/zip/PixShaft-0.1.0-portable.zip`
+- `desktop/build/compose/binaries/main-release/exe/PixShaft-Win-0.0.3.exe`
+- `desktop/build/compose/binaries/main-release/msi/PixShaft-Win-0.0.3.msi`
+- `desktop/build/compose/binaries/main-release/zip/PixShaft-Win-0.0.3-portable.zip`
+- 登录助手 `PixShaftWebAuth.exe` 与主程序同目录：`.../app/PixShaft-Win/`
 
-WiX 从 GitHub 下失败时用 NuGet，见 [upstream-sync.md](./upstream-sync.md)。图标目前来自 Android `ic_launcher`，需要换成 Windows 专用图标，见 [screenshots.md](./screenshots.md)。
+WiX 从 GitHub 下失败时用 NuGet，见 [upstream-sync.md](./upstream-sync.md)。窗口 / 安装包图标来自 `desktop/PixShaft.svg`（`desktop/icon.ico` + `desktop/src/main/resources/icon.xml`）。

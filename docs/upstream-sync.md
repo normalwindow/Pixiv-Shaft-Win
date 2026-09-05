@@ -68,7 +68,7 @@ $env:WIX_PATH = (Resolve-Path $tools).Path   # 必须含 light.exe / candle.exe
 .\gradlew.bat :desktop:packageReleaseDistributionForCurrentOS "-Dorg.gradle.java.installations.paths=C:\Users\kk\.jdks\jdk-17.0.2" "-Dorg.gradle.java.installations.auto-download=false"
 ```
 
-`packageReleaseDistributionForCurrentOS` 会顺带跑 `packageReleasePortableZip`。便携包在 `desktop/build/compose/binaries/main-release/zip/PixShaft-0.1.0-portable.zip`，解压后 `PixShaft.exe` 旁有 `PixShaft.portable`，数据目录是 `./data`。窗口 / 安装包图标来自 Android `ic_launcher`（`desktop/icon.ico` + `desktop/src/main/resources/icon.png`）。登录不要走系统默认桌面浏览器配置文件：Pixiv `/auth/pixiv/start` 会因 Windows Client Hints 返回「不正确的请求」。桌面端弹出独立 Chrome/Edge（Android UA + QUIC + host-resolver-rules）。本机 DNS 污染时 JavaFX WebView 会一直白屏。
+`packageReleaseDistributionForCurrentOS` 会顺带跑 `packageReleasePortableZip`。便携包在 `desktop/build/compose/binaries/main-release/zip/PixShaft-Win-0.0.3-portable.zip`，解压后 `PixShaft-Win/PixShaft-Win.exe` 旁有 `PixShaft.portable` 与 `PixShaftWebAuth.exe`，数据目录是 `./data`。窗口 / 安装包图标来自 `desktop/PixShaft.svg`（`desktop/icon.ico` + `desktop/src/main/resources/icon.xml`）。登录不要走系统默认桌面浏览器配置文件：Pixiv `/auth/pixiv/start` 会因 Windows Client Hints 返回「不正确的请求」。桌面端弹出独立 Chrome/Edge（Android UA + QUIC + host-resolver-rules）。本机 DNS 污染时 JavaFX WebView 会一直白屏。
 
 `-Pcompose.desktop.application.downloadWix=false` 在没设 `WIX_PATH` 时会让 `wixToolsetDir` 空值，连 app-image 也会失败。Groovy 访问 `buildTypes.release.proguard.isEnabled` 会踩 Kotlin JavaBean `is*` 命名，不要用它关 ProGuard；release 用 `desktop/proguard-rules.pro` 的 `-dontwarn`。
 

@@ -79,6 +79,8 @@ import androidx.compose.ui.unit.dp
 import ceui.pixshaft.desktop.AccountStore
 import ceui.pixshaft.desktop.AiTools
 import ceui.pixshaft.desktop.AppGraph
+import ceui.pixshaft.desktop.BatchSelection
+import ceui.pixshaft.desktop.FeatureColumn
 import ceui.pixshaft.desktop.ChatPollScope
 import ceui.pixshaft.desktop.ChatWsClient
 import ceui.pixshaft.desktop.LibraryScanner
@@ -826,7 +828,6 @@ fun DownloadQueueScreen(graph: AppGraph) {
     val jobs = queue.jobs
     val scope = rememberCoroutineScope()
     var filter by remember { mutableStateOf("all") }
-    var snackbarLocal by remember { mutableStateOf("") }
     val filtered = when (filter) {
         "running" -> jobs.filter { it.status == "running" }
         "pending" -> jobs.filter { it.status == "pending" }
@@ -856,56 +857,6 @@ fun DownloadQueueScreen(graph: AppGraph) {
             }
             TextButton(onClick = { queue.retryAllFailed() }, enabled = failed > 0) { Text("全部重试") }
             TextButton(onClick = { queue.clearFinished() }, enabled = done > 0 || failed > 0) { Text("清除已完成") }
-        }
-        // 批量下载清单：卡片右键“加入批量下载”收集到此，一键全部入队
-        if (graph.batch.items.isNotEmpty()) {
-            Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                Column(Modifier.padding(12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            "批量清单（${graph.batch.items.size}）",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.weight(1f),
-                        )
-                        TextButton(onClick = {
-                            graph.batch.items.forEach { graph.queue.enqueue(it) }
-                            scope.launch { snackbarLocal = "已全部加入下载队列" }
-                            graph.batch.clear()
-                        }) { Text("全部下载") }
-                        TextButton(onClick = { graph.batch.clear() }) { Text("清空") }
-                    }
-                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        graph.batch.items.forEach { b ->
-                            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
-                                Row(
-                                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        b.title ?: "#${b.id}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.widthIn(max = 120.dp),
-                                    )
-                                    Icon(
-                                        Icons.Outlined.Close,
-                                        contentDescription = "移除",
-                                        modifier = Modifier
-                                            .size(14.dp)
-                                            .clickable { graph.batch.remove(b.id) },
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    if (snackbarLocal.isNotBlank()) {
-                        Text(snackbarLocal, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-            }
         }
         HorizontalWheelRow(
             Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -1236,27 +1187,40 @@ fun DiscoveryScreen(
 ) {
     var seed by remember { mutableStateOf(0) }
     var items by remember(seed) { mutableStateOf(graph.history.list().shuffled(java.util.Random(seed.toLong())).take(40)) }
+    val batch = remember { BatchSelection() }
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("发现", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "从你的浏览历史里随机重新挖掘——换个角度再看一遍",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = { seed += 1 }) { Icon(Icons.Outlined.Refresh, contentDescription = "换一批") }
-        }
+        FeedActionRow(
+            graph = graph,
+            batch = batch,
+            onRefresh = { seed += 1 },
+            leading = {
+                Column {
+                    Text("发现", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "从你的浏览历史里随机重新挖掘——换个角度再看一遍",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         IllustWaterfall(
             illusts = items,
             loading = false,
             error = null,
             loader = loader,
             onOpen = onOpen,
+            batch = batch,
+            onBatchDownload = { list ->
+                list.forEach { graph.queue.enqueue(it) }
+                batch.reset()
+            },
+            onDownload = { graph.queue.enqueue(it) },
+            onAddFeature = { illust ->
+                val author = illust.user ?: return@IllustWaterfall
+                graph.features.add(FeatureColumn.author(author.id, author.name.orEmpty()))
+            },
             header = {
                 if (items.isEmpty()) {
                     Text(
@@ -1268,5 +1232,6 @@ fun DiscoveryScreen(
                 }
             },
         )
+        }
     }
 }

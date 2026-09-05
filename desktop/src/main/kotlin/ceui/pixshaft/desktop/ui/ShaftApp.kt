@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items as listItems
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -45,11 +46,13 @@ import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Menu
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.DoneAll
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.SwapHoriz
@@ -96,6 +99,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowPlacement
@@ -103,6 +107,8 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.clickable
 import ceui.pixshaft.desktop.AppGraph
+import ceui.pixshaft.desktop.BatchSelection
+import ceui.pixshaft.desktop.FeatureColumn
 import ceui.pixshaft.desktop.FeedState
 import ceui.pixshaft.desktop.shouldHide
 import ceui.pixshaft.desktop.SingleInstance
@@ -510,6 +516,7 @@ private fun DestContent(
                 loadMore = { url -> graph.client.api.nextIllusts(url) },
                 cacheKey = "bookmarks",
                 gridKey = "bookmarks",
+                feature = FeatureColumn.bookmarks(),
             )
         }
         Dest.Newest -> SimpleFeedPage(
@@ -520,15 +527,34 @@ private fun DestContent(
             loadMore = { url -> graph.client.api.nextIllusts(url) },
             cacheKey = "newest",
             gridKey = "newest",
+            feature = FeatureColumn.newest(),
         )
-        Dest.History -> IllustWaterfall(
-            illusts = graph.history.list(),
-            loading = false,
-            error = null,
-            loader = loader,
-            onOpen = openIllust,
-            gridKey = "history",
-        )
+        Dest.History -> {
+            val batch = remember { BatchSelection() }
+            Column(Modifier.fillMaxSize()) {
+                FeedActionRow(graph = graph, batch = batch)
+                Box(Modifier.weight(1f).fillMaxWidth()) {
+                IllustWaterfall(
+                    illusts = graph.history.list(),
+                    loading = false,
+                    error = null,
+                    loader = loader,
+                    onOpen = openIllust,
+                    gridKey = "history",
+                    batch = batch,
+                    onBatchDownload = { list ->
+                        list.forEach { graph.queue.enqueue(it) }
+                        batch.reset()
+                    },
+                    onDownload = { graph.queue.enqueue(it) },
+                    onAddFeature = { illust ->
+                        val author = illust.user ?: return@IllustWaterfall
+                        graph.features.add(FeatureColumn.author(author.id, author.name.orEmpty()))
+                    },
+                )
+                }
+            }
+        }
         Dest.Novels -> NovelListScreen(graph, loader) { push(Dest.Novel(it.id)) }
         is Dest.Novel -> NovelReaderScreen(graph, dest.id)
         Dest.FollowingUsers -> FollowingUsersScreen(graph, loader) { push(Dest.User(it)) }
@@ -573,7 +599,21 @@ private fun DestContent(
         Dest.Fans -> FollowingUsersScreen(graph, loader, followers = true) { push(Dest.User(it)) }
         Dest.WatchLater -> StubScreen("稍后再看")
         Dest.Pinned -> StubScreen("我置顶的内容")
-        Dest.Feature -> StubScreen("精华列")
+        Dest.Feature -> FeatureColumnsPage(
+            graph = graph,
+            onOpenColumn = { column ->
+                when (column.kind) {
+                    "search" -> push(Dest.Search(column.key))
+                    "author" -> column.key.toLongOrNull()?.let { push(Dest.User(it)) }
+                    "related" -> column.key.toLongOrNull()?.let { push(Dest.Related(it)) }
+                    "following" -> push(Dest.Following)
+                    "ranking" -> push(Dest.Ranking)
+                    "newest" -> push(Dest.Newest)
+                    "bookmarks" -> push(Dest.Bookmarks)
+                    else -> Unit
+                }
+            },
+        )
         Dest.Watchlist -> StubScreen("追更列表")
         Dest.NovelMarkers -> StubScreen("小说书签")
         Dest.Usage -> StubScreen("使用情况", "借号搜索用量，桌面稍后接入。")
@@ -592,6 +632,85 @@ private fun DestContent(
         Dest.SafTest -> StubScreen("SAF 写入压测", "Windows 无 SAF，此页仅占位。")
         Dest.NetworkTest -> NetworkTestScreen(graph)
         Dest.WebHome -> StubScreen("Web 首页")
+    }
+}
+
+@Composable
+private fun FeatureColumnsPage(
+    graph: AppGraph,
+    onOpenColumn: (FeatureColumn) -> Unit,
+) {
+    Column(Modifier.fillMaxSize().padding(24.dp)) {
+        Text("精华列", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+        Text(
+            "把一次搜索或一位作者收藏为一栏，每栏都是一条独立瀑布流",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, bottom = 14.dp),
+        )
+        if (graph.features.items.isEmpty()) {
+            Text(
+                "还没有收藏的栏。在搜索、作者、关注、相关、排行等瀑布流点星标收入精华列。",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        androidx.compose.foundation.lazy.LazyColumn(
+            Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            listItems(
+                graph.features.items,
+                key = { it.kind + ":" + it.key },
+            ) { column ->
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    tonalElevation = 1.dp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenColumn(column) },
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            when (column.kind) {
+                                "author" -> Icons.Outlined.Person
+                                "search" -> Icons.Outlined.Search
+                                "ranking" -> Icons.Outlined.Whatshot
+                                "bookmarks" -> Icons.Outlined.Star
+                                "following" -> Icons.Outlined.Home
+                                else -> Icons.Outlined.Explore
+                            },
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(column.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                column.kindLabel(),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = { graph.features.remove(column) }, modifier = Modifier.size(30.dp)) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = "删除",
+                                modifier = Modifier.size(15.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Outlined.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -623,37 +742,37 @@ private fun HomePage(
     onOpenTags: () -> Unit,
 ) {
     var type by rememberSaveable { mutableStateOf("illust") }
+    val batch = remember { BatchSelection() }
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Surface(
-                shape = RoundedCornerShape(18.dp),
-                tonalElevation = 1.dp,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(18.dp))
-                    .clickable(onClick = onOpenTags),
-            ) {
-                Row(
-                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+        FeedActionRow(
+            graph = graph,
+            batch = batch,
+            onRefresh = { graph.feedStore.refresh("home:$type") },
+            leading = {
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    tonalElevation = 1.dp,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(18.dp))
+                        .clickable(onClick = onOpenTags),
                 ) {
-                    Icon(
-                        Icons.Outlined.Whatshot,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    Text(tr()["hotTags"], style = MaterialTheme.typography.labelLarge)
+                    Row(
+                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            Icons.Outlined.Whatshot,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(tr()["hotTags"], style = MaterialTheme.typography.labelLarge)
+                    }
                 }
-            }
-            Spacer(Modifier.weight(1f))
-            IconButton(onClick = { graph.feedStore.refresh("home:$type") }) {
-                Icon(Icons.Outlined.Refresh, contentDescription = "刷新推荐")
-            }
-        }
+            },
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         SimpleFeedPage(
             graph = graph,
             loader = loader,
@@ -670,6 +789,8 @@ private fun HomePage(
             key = type,
             cacheKey = "home:$type",
             gridKey = type,
+            batch = batch,
+            showToolbar = false,
             header = {
                 Row(Modifier.padding(4.dp)) {
                     listOf("illust" to "插画", "manga" to "漫画").forEach { (id, label) ->
@@ -683,6 +804,7 @@ private fun HomePage(
                 }
             },
         )
+        }
     }
 }
 
@@ -709,36 +831,44 @@ private fun RankingPage(
     var mode by rememberSaveable { mutableStateOf("day") }
     var date by rememberSaveable { mutableStateOf("") }
     var showDatePicker by remember { mutableStateOf(false) }
+    val batch = remember { BatchSelection() }
 
     val modes = (if (mangaMode) RANK_MANGA_MODES else RANK_ILLUST_MODES)
         .filter { graph.settings.current.mainViewR18 || !it.first.contains("r18") }
     LaunchedEffect(modes) {
         if (modes.none { it.first == mode }) mode = modes.firstOrNull()?.first ?: "day"
     }
+    val modeLabel = modes.firstOrNull { it.first == mode }?.second ?: mode
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            FilterChip(selected = !mangaMode, onClick = { mangaMode = false; mode = "day" }, label = { Text(tr()["illust"]) })
-            Spacer(Modifier.width(6.dp))
-            FilterChip(selected = mangaMode, onClick = { mangaMode = true; mode = "day_manga" }, label = { Text(tr()["manga"]) })
-            Spacer(Modifier.width(10.dp))
-            IconButton(onClick = { showDatePicker = true }) {
-                Icon(Icons.Outlined.Event, contentDescription = "选择日期")
-            }
-            if (date.isNotBlank()) {
-                FilterChip(selected = true, onClick = { showDatePicker = true }, label = { Text(date) })
-                TextButton(onClick = { date = "" }) { Text("今日") }
-            } else {
-                Text(
-                    "选日期看历史榜单",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        FeedActionRow(
+            graph = graph,
+            batch = batch,
+            feature = FeatureColumn.ranking(mode, modeLabel),
+            onRefresh = { graph.feedStore.refresh("ranking:$mode:$date") },
+            onDownloadAll = {
+                graph.feedStore.get("ranking:$mode:$date").items.orEmpty().forEach { graph.queue.enqueue(it) }
+            },
+            leading = {
+                FilterChip(selected = !mangaMode, onClick = { mangaMode = false; mode = "day" }, label = { Text(tr()["illust"]) })
+                Spacer(Modifier.width(6.dp))
+                FilterChip(selected = mangaMode, onClick = { mangaMode = true; mode = "day_manga" }, label = { Text(tr()["manga"]) })
+                Spacer(Modifier.width(10.dp))
+                IconButton(onClick = { showDatePicker = true }) {
+                    Icon(Icons.Outlined.Event, contentDescription = "选择日期")
+                }
+                if (date.isNotBlank()) {
+                    FilterChip(selected = true, onClick = { showDatePicker = true }, label = { Text(date) })
+                    TextButton(onClick = { date = "" }) { Text("今日") }
+                } else {
+                    Text(
+                        "选日期看历史榜单",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+        )
         HorizontalWheelRow(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         ) {
@@ -751,17 +881,22 @@ private fun RankingPage(
                 )
             }
         }
-        SimpleFeedPage(
-            graph = graph,
-            loader = loader,
-            load = { graph.client.api.ranking(mode, date.ifBlank { null }) },
-            onOpen = onOpen,
-            loadMore = { url -> graph.client.api.nextIllusts(url) },
-            key = "$mode:$date",
-            cacheKey = "ranking:$mode:$date",
-            hideBookmarked = graph.settings.current.filterRankBookmarked,
-            gridKey = "$mode:$date",
-        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            SimpleFeedPage(
+                graph = graph,
+                loader = loader,
+                load = { graph.client.api.ranking(mode, date.ifBlank { null }) },
+                onOpen = onOpen,
+                loadMore = { url -> graph.client.api.nextIllusts(url) },
+                key = "$mode:$date",
+                cacheKey = "ranking:$mode:$date",
+                hideBookmarked = graph.settings.current.filterRankBookmarked,
+                gridKey = "$mode:$date",
+                batch = batch,
+                showToolbar = false,
+                feature = FeatureColumn.ranking(mode, modeLabel),
+            )
+        }
     }
     if (showDatePicker) {
         RankingDateDialog(
@@ -860,17 +995,26 @@ private fun FollowingPage(
     var novelMode by rememberSaveable { mutableStateOf(false) }
     var restrict by rememberSaveable { mutableStateOf("all") }
     val t = tr()
+    val batch = remember(restrict) { BatchSelection() }
     Column(Modifier.fillMaxSize()) {
-        HorizontalWheelRow(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            FilterChip(selected = !novelMode, onClick = { novelMode = false }, label = { Text(t["illustManga"]) })
-            FilterChip(selected = novelMode, onClick = { novelMode = true }, label = { Text(t["novel"]) })
-            Spacer(Modifier.width(6.dp))
-            listOf("all" to t["all"], "public" to t["public"], "private" to t["private"]).forEach { (value, label) ->
-                FilterChip(selected = restrict == value, onClick = { restrict = value }, label = { Text(label) })
-            }
-        }
+        FeedActionRow(
+            graph = graph,
+            batch = if (novelMode) null else batch,
+            feature = if (novelMode) null else FeatureColumn.following(restrict),
+            onRefresh = if (novelMode) null else ({ graph.feedStore.refresh("following:$restrict") }),
+            onDownloadAll = if (novelMode) null else ({
+                graph.feedStore.get("following:$restrict").items.orEmpty().forEach { graph.queue.enqueue(it) }
+            }),
+            leading = {
+                FilterChip(selected = !novelMode, onClick = { novelMode = false }, label = { Text(t["illustManga"]) })
+                FilterChip(selected = novelMode, onClick = { novelMode = true }, label = { Text(t["novel"]) })
+                Spacer(Modifier.width(6.dp))
+                listOf("all" to t["all"], "public" to t["public"], "private" to t["private"]).forEach { (value, label) ->
+                    FilterChip(selected = restrict == value, onClick = { restrict = value }, label = { Text(label) })
+                }
+            },
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
         if (novelMode) {
             NovelListScreen(
                 graph = graph,
@@ -888,7 +1032,11 @@ private fun FollowingPage(
                 key = restrict,
                 cacheKey = "following:$restrict",
                 gridKey = restrict,
+                batch = batch,
+                showToolbar = false,
+                feature = FeatureColumn.following(restrict),
             )
+        }
         }
     }
 }
@@ -911,9 +1059,20 @@ private fun SearchPage(
     val bookmarkMin = graph.settings.current.searchBookmarkMin
     val r18 = graph.settings.current.searchR18
     val t = tr()
+    val batch = remember(query) { BatchSelection() }
+    val cacheKey = "search:$query:$sort:$target:$bookmarkMin:$r18"
     Column(Modifier.fillMaxSize()) {
+        FeedActionRow(
+            graph = graph,
+            batch = batch,
+            feature = FeatureColumn.search(query),
+            onRefresh = { graph.feedStore.refresh(cacheKey) },
+            onDownloadAll = {
+                graph.feedStore.get(cacheKey).items.orEmpty().forEach { graph.queue.enqueue(it) }
+            },
+        )
         HorizontalWheelRow(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
         ) {
             Text(
                 t["filter"],
@@ -954,30 +1113,35 @@ private fun SearchPage(
                 )
             }
         }
-        SimpleFeedPage(
-            graph = graph,
-            loader = loader,
-            load = {
-                graph.client.api.searchIllust(
-                    query,
-                    sort = sort,
-                    searchTarget = target,
-                )
-            },
-            onOpen = onOpen,
-            loadMore = { url -> graph.client.api.nextIllusts(url) },
-            key = "$query:$sort:$target:$bookmarkMin:$r18",
-            cacheKey = "search:$query:$sort:$target:$bookmarkMin:$r18",
-            gridKey = "$query:$sort:$target:$bookmarkMin:$r18",
-            predicate = { illust ->
-                (bookmarkMin == 0 || (illust.total_bookmarks ?: 0) >= bookmarkMin) &&
-                    when (r18) {
-                        1 -> illust.isR18()
-                        2 -> !illust.isR18()
-                        else -> true
-                    }
-            },
-        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            SimpleFeedPage(
+                graph = graph,
+                loader = loader,
+                load = {
+                    graph.client.api.searchIllust(
+                        query,
+                        sort = sort,
+                        searchTarget = target,
+                    )
+                },
+                onOpen = onOpen,
+                loadMore = { url -> graph.client.api.nextIllusts(url) },
+                key = "$query:$sort:$target:$bookmarkMin:$r18",
+                cacheKey = cacheKey,
+                gridKey = "$query:$sort:$target:$bookmarkMin:$r18",
+                batch = batch,
+                showToolbar = false,
+                feature = FeatureColumn.search(query),
+                predicate = { illust ->
+                    (bookmarkMin == 0 || (illust.total_bookmarks ?: 0) >= bookmarkMin) &&
+                        when (r18) {
+                            1 -> illust.isR18()
+                            2 -> !illust.isR18()
+                            else -> true
+                        }
+                },
+            )
+        }
     }
 }
 
@@ -1067,35 +1231,86 @@ private fun RelatedPage(
     id: Long,
     onOpen: (Illust) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
     val feed = graph.feedStore.get("related:$id")
     val items = feed.items.orEmpty()
+    val batch = remember(id) { BatchSelection() }
     LaunchedEffect(id, feed.reload) {
         if (feed.items != null) return@LaunchedEffect
         feed.loading = true
         feed.error = null
-        runCatching { withContext(Dispatchers.IO) { graph.client.api.related(id).illusts } }
-            .onSuccess {
-                feed.items = it.uniqueIllusts().filterNot { illust -> graph.settings.current.shouldHide(illust) }
+        runCatching { withContext(Dispatchers.IO) { graph.client.api.related(id) } }
+            .onSuccess { resp ->
+                feed.items = resp.illusts.uniqueIllusts().filterNot { illust -> graph.settings.current.shouldHide(illust) }
+                feed.next = resp.next_url
             }
             .onFailure { feed.error = it.userMessage() }
         feed.loading = false
     }
-    IllustWaterfall(
-        illusts = items,
-        loading = feed.loading,
-        error = feed.error,
-        loader = loader,
-        onOpen = onOpen,
-        gridKey = id,
-        onRetry = { feed.reset() },
-        header = {
-            Text(
-                "相关作品",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
-            )
-        },
-    )
+    Column(Modifier.fillMaxSize()) {
+        FeedActionRow(
+            graph = graph,
+            batch = batch,
+            feature = FeatureColumn.related(id),
+            onRefresh = { graph.feedStore.refresh("related:$id") },
+            onDownloadAll = { items.forEach { graph.queue.enqueue(it) } },
+            leading = {
+                Text("相关作品", style = MaterialTheme.typography.titleLarge)
+            },
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+        IllustWaterfall(
+            illusts = items,
+            loading = feed.loading,
+            error = feed.error,
+            loader = loader,
+            onOpen = onOpen,
+            gridKey = id,
+            onRetry = { feed.reset() },
+            batch = batch,
+            onBatchDownload = { list ->
+                list.forEach { graph.queue.enqueue(it) }
+                batch.reset()
+            },
+            onDownload = { graph.queue.enqueue(it) },
+            onToggleBookmark = { target ->
+                scope.launch {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            if (target.isBookmarked) graph.client.api.removeBookmark(target.id)
+                            else graph.client.api.addBookmark(
+                                target.id,
+                                if (graph.settings.current.privateStar) "private" else "public",
+                            )
+                        }
+                    }.onSuccess {
+                        feed.items = feed.items?.map {
+                            if (it.id == target.id) it.copy(is_bookmarked = !target.isBookmarked) else it
+                        }
+                    }
+                }
+            },
+            onAddFeature = { illust ->
+                val author = illust.user ?: return@IllustWaterfall
+                graph.features.add(FeatureColumn.author(author.id, author.name.orEmpty()))
+            },
+            onLoadMore = {
+                val url = feed.next ?: return@IllustWaterfall
+                if (feed.loadingMore) return@IllustWaterfall
+                feed.loadingMore = true
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { graph.client.api.nextIllusts(url) } }
+                        .onSuccess {
+                            feed.items = (feed.items.orEmpty() + it.illusts).uniqueIllusts()
+                                .filterNot { illust -> graph.settings.current.shouldHide(illust) }
+                            feed.next = it.next_url
+                        }
+                    feed.loadingMore = false
+                }
+            },
+        )
+        }
+    }
 }
 
 /** 热门标签独立页：标签 + 封面网格（对齐手机端热门标签页）。 */
@@ -1412,10 +1627,15 @@ internal fun SimpleFeedPage(
     cacheKey: String? = null,
     predicate: ((Illust) -> Boolean)? = null,
     gridKey: Any = Unit,
+    batch: BatchSelection? = null,
+    showToolbar: Boolean = true,
+    feature: FeatureColumn? = null,
 ) {
     val feed = cacheKey?.let { graph.feedStore.get(it) } ?: remember(key) { FeedState() }
     val items = feed.items.orEmpty()
     val scope = rememberCoroutineScope()
+    val ownedBatch = remember(cacheKey, key) { BatchSelection() }
+    val selection = batch ?: ownedBatch
 
     fun filtered(list: List<Illust>): List<Illust> =
         list.uniqueIllusts()
@@ -1452,33 +1672,60 @@ internal fun SimpleFeedPage(
             .onFailure { feed.error = it.userMessage() }
         feed.loading = false
     }
-    IllustWaterfall(
-        illusts = items,
-        loading = feed.loading,
-        error = feed.error,
-        loader = loader,
-        onOpen = onOpen,
-        header = header,
-        loadingMore = feed.loadingMore,
-        columnsOverride = graph.settings.current.lineCount,
-        gridKey = gridKey,
-        onToggleBookmark = { toggleBookmark(it) },
-        onAddBatch = { graph.batch.add(it) },
-        onAddFeature = { graph.features.add(it) },
-        onHide = { target -> feed.items = feed.items?.filterNot { it.id == target.id } },
-        onRetry = { feed.reset() },
-        onLoadMore = {
-            val url = feed.next ?: return@IllustWaterfall
-            if (feed.loadingMore) return@IllustWaterfall
-            feed.loadingMore = true
-            scope.launch {
-                runCatching { withContext(Dispatchers.IO) { loadMore(url) } }
-                    .onSuccess {
-                        feed.items = filtered(feed.items.orEmpty() + it.illusts)
-                        feed.next = it.next_url
-                    }
-                feed.loadingMore = false
-            }
-        },
-    )
+    val waterfall = @Composable {
+        IllustWaterfall(
+            illusts = items,
+            loading = feed.loading,
+            error = feed.error,
+            loader = loader,
+            onOpen = onOpen,
+            header = header,
+            loadingMore = feed.loadingMore,
+            gridKey = gridKey,
+            onToggleBookmark = { toggleBookmark(it) },
+            onAddFeature = { illust ->
+                val author = illust.user ?: return@IllustWaterfall
+                graph.features.add(FeatureColumn.author(author.id, author.name.orEmpty()))
+            },
+            onHide = { target -> feed.items = feed.items?.filterNot { it.id == target.id } },
+            batch = selection,
+            onBatchDownload = { list ->
+                list.forEach { graph.queue.enqueue(it) }
+                selection.reset()
+            },
+            onDownload = { graph.queue.enqueue(it) },
+            onRetry = { feed.reset() },
+            onLoadMore = {
+                val url = feed.next ?: return@IllustWaterfall
+                if (feed.loadingMore) return@IllustWaterfall
+                feed.loadingMore = true
+                scope.launch {
+                    runCatching { withContext(Dispatchers.IO) { loadMore(url) } }
+                        .onSuccess {
+                            feed.items = filtered(feed.items.orEmpty() + it.illusts)
+                            feed.next = it.next_url
+                        }
+                    feed.loadingMore = false
+                }
+            },
+        )
+    }
+    if (showToolbar) {
+        Column(Modifier.fillMaxSize()) {
+            FeedActionRow(
+                graph = graph,
+                batch = selection,
+                feature = feature,
+                onRefresh = cacheKey?.let { ck -> { graph.feedStore.refresh(ck) } },
+                onDownloadAll = if (feature != null) {
+                    { items.forEach { graph.queue.enqueue(it) } }
+                } else {
+                    null
+                },
+            )
+            Box(Modifier.weight(1f).fillMaxWidth()) { waterfall() }
+        }
+    } else {
+        waterfall()
+    }
 }

@@ -32,6 +32,60 @@ class SettingsTest {
     }
 
     @Test
+    fun featureColumnFactoriesCoverFeedKinds() {
+        assertEquals("following", FeatureColumn.following("public").kind)
+        assertEquals("public", FeatureColumn.following("public").key)
+        assertEquals("关注（公开）", FeatureColumn.following("public").title)
+        assertEquals("related", FeatureColumn.related(99).kind)
+        assertEquals("newest", FeatureColumn.newest().kind)
+        assertEquals("bookmarks", FeatureColumn.bookmarks().kind)
+        assertEquals("关注动态", FeatureColumn.following("all").kindLabel())
+    }
+
+    @Test
+    fun featureColumnJsonRoundTripKeepsKindKeyTitle() {
+        val gson = com.google.gson.Gson()
+        val original = listOf(
+            FeatureColumn.author(42L, "alice"),
+            FeatureColumn.search("cat"),
+            FeatureColumn.following("public"),
+        )
+        val json = gson.toJson(original)
+        val type = object : com.google.gson.reflect.TypeToken<MutableList<FeatureColumn>>() {}.type
+        val restored: List<FeatureColumn> = gson.fromJson(json, type)
+        assertEquals(3, restored.size)
+        assertEquals("author", restored[0].kind)
+        assertEquals("42", restored[0].key)
+        assertEquals("alice 的作品", restored[0].title)
+        assertEquals("search", restored[1].kind)
+        assertEquals("cat", restored[1].key)
+        assertEquals("following", restored[2].kind)
+        assertEquals("public", restored[2].key)
+    }
+
+    @Test
+    fun commentBodyPrefersTextThenStampPlaceholder() {
+        val text = ceui.pixshaft.shared.model.Comment(comment = "hello")
+        val stamp = ceui.pixshaft.shared.model.Comment(
+            stamp = ceui.pixshaft.shared.model.CommentStamp(stamp_id = 1, stamp_url = "https://example/s.png"),
+        )
+        val empty = ceui.pixshaft.shared.model.Comment()
+        assertEquals("hello", text.bodyText())
+        assertEquals("[stamp]", stamp.bodyText())
+        assertEquals("", empty.bodyText())
+    }
+
+    @Test
+    fun defaultSettingsEnableDirectConnectCustomTitleBarAndWaterfall() {
+        val s = DesktopSettings()
+        assertTrue(s.directConnect)
+        assertTrue(s.customTitleBar)
+        assertEquals(0, s.browseLayout)
+        assertEquals(0, s.detailStyle)
+        assertEquals("home", s.navigationInitPosition)
+    }
+
+    @Test
     fun defaultCacheIsUnderAppDataNotSystemTemp() {
         val cache = AppPaths.defaultCache().toString()
         assertTrue(cache.endsWith("cache") || cache.endsWith("cache\\") || cache.endsWith("cache/"))

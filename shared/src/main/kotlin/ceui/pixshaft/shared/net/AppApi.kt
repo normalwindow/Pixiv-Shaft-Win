@@ -1,6 +1,7 @@
 package ceui.pixshaft.shared.net
 
 import ceui.pixshaft.shared.model.CommentResponse
+import ceui.pixshaft.shared.model.PostCommentResponse
 import ceui.pixshaft.shared.model.HomeIllustResponse
 import ceui.pixshaft.shared.model.IllustResponse
 import ceui.pixshaft.shared.model.NovelResponse
@@ -61,7 +62,7 @@ interface AppApi {
         @Query("restrict") restrict: String = "all",
     ): IllustResponse
 
-    @GET("/v2/illust/related")
+    @GET("/v2/illust/related?filter=for_android")
     suspend fun related(
         @Query("illust_id") illustId: Long,
     ): IllustResponse
@@ -111,10 +112,31 @@ interface AppApi {
         @Query("content_type") contentType: String = "illust",
     ): IllustResponse
 
-    @GET("/v2/illust/comments")
+    @GET("/v3/illust/comments")
     suspend fun comments(
         @Query("illust_id") illustId: Long,
     ): CommentResponse
+
+    @GET("/v3/novel/comments")
+    suspend fun novelComments(
+        @Query("novel_id") novelId: Long,
+    ): CommentResponse
+
+    @FormUrlEncoded
+    @POST("/v1/illust/comment/add")
+    suspend fun postIllustComment(
+        @Field("illust_id") illustId: Long,
+        @Field("comment") comment: String,
+        @Field("parent_comment_id") parentCommentId: Long? = null,
+    ): PostCommentResponse
+
+    @FormUrlEncoded
+    @POST("/v1/novel/comment/add")
+    suspend fun postNovelComment(
+        @Field("novel_id") novelId: Long,
+        @Field("comment") comment: String,
+        @Field("parent_comment_id") parentCommentId: Long? = null,
+    ): PostCommentResponse
 
     @GET("/v1/novel/recommended?include_ranking_novels=true&filter=for_ios")
     suspend fun recommendedNovels(): NovelResponse

@@ -94,6 +94,8 @@ private val SETTINGS_SEARCH_INDEX = listOf(
     SettingsSearchHit("appearance", "卡片标题叠层", "overlay"),
     SettingsSearchHit("appearance", "紧凑界面", "compact"),
     SettingsSearchHit("appearance", "浏览模式", "左右分栏 双栏 瀑布流 平板 split"),
+    SettingsSearchHit("appearance", "瀑布流列数", "列数 自定义 网格"),
+    SettingsSearchHit("appearance", "自绘标题栏", "无边框 标题栏"),
     SettingsSearchHit("browsing", "保存浏览历史", "history"),
     SettingsSearchHit("browsing", "不显示 AI 生成的作品", "屏蔽 AI"),
     SettingsSearchHit("viewing", "详情面板默认折叠", "侧栏"),
@@ -241,6 +243,9 @@ fun SettingsCategoryScreen(
                     ChoiceRow("强调色", listOf("蓝", "紫", "青", "玫红", "琥珀", "绿", "橙", "洋红"), s.accentColor.coerceIn(0, 7)) {
                         set(s.copy(accentColor = it))
                     }
+                    ToggleRow("自绘标题栏", "默认开。无边框窗口：拖拽 / 贴靠 / 边缘缩放，切换时重建窗口", s.customTitleBar) {
+                        set(s.copy(customTitleBar = it))
+                    }
                     ChoiceRow(
                         "语言 / Language",
                         listOf("跟随系统", "简体中文", "English", "日本語"),
@@ -254,8 +259,12 @@ fun SettingsCategoryScreen(
                     }
                 }
                 SettingsGroup("布局") {
-                    ChoiceRow("列数", listOf("自动", "2", "3", "4", "5", "6"), if (s.lineCount == 0) 0 else (s.lineCount - 1).coerceIn(0, 5)) {
-                        set(s.copy(lineCount = if (it == 0) 0 else it + 1))
+                    ChoiceRow(
+                        "瀑布流列数",
+                        listOf("自动", "1", "2", "3", "4", "5", "6", "7", "8"),
+                        s.lineCount.coerceIn(0, 8),
+                    ) {
+                        set(s.copy(lineCount = it))
                     }
                     ToggleRow("瀑布流布局", "关闭则等宽网格", s.useStaggeredLayout) {
                         set(s.copy(useStaggeredLayout = it))

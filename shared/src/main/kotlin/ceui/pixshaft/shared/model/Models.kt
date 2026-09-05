@@ -232,16 +232,31 @@ data class NovelTextResponse(
     fun body(): String = novel_text ?: text.orEmpty()
 }
 
+data class CommentStamp(
+    val stamp_id: Long = 0L,
+    val stamp_url: String? = null,
+)
+
 data class Comment(
     val id: Long = 0L,
     val comment: String? = null,
     val date: String? = null,
     val user: User? = null,
-)
+    val stamp: CommentStamp? = null,
+    val has_replies: Boolean = false,
+) {
+    fun bodyText(): String = comment.orEmpty().ifBlank {
+        if (stamp != null) "[stamp]" else ""
+    }
+}
 
 data class CommentResponse(
     val comments: List<Comment> = emptyList(),
     val next_url: String? = null,
+)
+
+data class PostCommentResponse(
+    val comment: Comment? = null,
 )
 
 data class TrendingTag(

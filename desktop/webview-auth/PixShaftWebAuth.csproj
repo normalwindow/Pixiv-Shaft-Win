@@ -8,7 +8,7 @@
     <AssemblyName>PixShaftWebAuth</AssemblyName>
     <RootNamespace>PixShaftWebAuth</RootNamespace>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <ApplicationIcon></ApplicationIcon>
+    <ApplicationIcon>icon.ico</ApplicationIcon>
     <DebugType>none</DebugType>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

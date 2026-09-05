@@ -14,7 +14,7 @@ README 不再把上游手机截图冒充成本 fork 的界面。下列文件请�
 | 能力条 | `snap/pixshaft/capabilities-{en,zh}.svg` | Windows 能力条，或删掉改用表格 |
 | 技术栈条 | `snap/pixshaft/tech-{en,zh}.svg`（Room/Glide/Cronet） | Compose Desktop / OkHttp / Chromium QUIC |
 | CTA 条 | `snap/pixshaft/cta-{en,zh}.svg` | 指向本仓 Releases，文案不要写 Play |
-| 窗口图标 | `desktop/icon.ico`、`desktop/src/main/resources/icon.png` | 从 Android `ic_launcher` 临摹来的，需要 Windows 专用标 |
+| 窗口图标 | `desktop/icon.ico`、`desktop/src/main/resources/icon.xml` / `icon.png` | 已换成 `desktop/PixShaft.svg` |
 | 应用 Logo | `snap/pixshaft/shaft-logo.png` | 若要和上游品牌区分，换本 fork 的标 |
 
 ## README 窗口截图（现在空缺）

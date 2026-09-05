@@ -44,8 +44,7 @@ class AppGraph {
     val queue = DownloadQueue(this, gson)
     val searchHistory = SearchHistoryStore(gson)
     val feedStore = FeedStore()
-    val features = IllustListStore(AppPaths.featureFile, gson)
-    val batch = IllustListStore(AppPaths.batchFile, gson)
+    val features = FeatureColumnStore(AppPaths.featureFile, gson)
     val downloaded = DownloadedStore(this)
 
     @Volatile private var loginReturn: LoginReturnChannel? = null

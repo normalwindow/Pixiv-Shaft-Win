@@ -171,45 +171,126 @@ class ChatWsClient(
 /** 聊天自动刷新用的公共协程作用域。 */
 val ChatPollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-/** 精华列：本地收藏的作品清单（与 Pixiv 收藏无关）。 */
-class IllustListStore(
+/**
+ * 精华列：把一个「栏」收藏下来，对齐源 App 的精华列概念——
+ * 每一栏是一条独立瀑布流（某次搜索、某位作者的作品…）。
+ */
+data class FeatureColumn(
+    val kind: String = "", // search / author / following / related / ranking / newest / bookmarks
+    val key: String = "", // 搜索词 / 作者 UID / restrict / illust id / ranking mode
+    val title: String = "",
+) {
+    companion object {
+        fun search(query: String) = FeatureColumn("search", query, "搜索：$query")
+        fun author(uid: Long, name: String) = FeatureColumn("author", uid.toString(), "${name.ifBlank { "user $uid" }} 的作品")
+        fun following(restrict: String) = FeatureColumn(
+            "following",
+            restrict,
+            when (restrict) {
+                "public" -> "关注（公开）"
+                "private" -> "关注（私人）"
+                else -> "关注（全部）"
+            },
+        )
+        fun related(id: Long) = FeatureColumn("related", id.toString(), "相关作品 #$id")
+        fun ranking(mode: String, label: String) = FeatureColumn("ranking", mode, "排行：$label")
+        fun newest() = FeatureColumn("newest", "illust", "最新作品")
+        fun bookmarks() = FeatureColumn("bookmarks", "self", "我的收藏")
+    }
+
+    fun kindLabel(): String = when (kind) {
+        "author" -> "作者作品"
+        "search" -> "搜索"
+        "following" -> "关注动态"
+        "related" -> "相关作品"
+        "ranking" -> "排行榜"
+        "newest" -> "最新"
+        "bookmarks" -> "收藏"
+        else -> kind
+    }
+}
+
+class FeatureColumnStore(
     private val file: java.nio.file.Path,
     private val gson: Gson = Gson(),
 ) {
-    private val type = object : TypeToken<MutableList<Illust>>() {}.type
-    val items = androidx.compose.runtime.mutableStateListOf<Illust>()
+    private val type = object : TypeToken<MutableList<FeatureColumn>>() {}.type
+    val items = androidx.compose.runtime.mutableStateListOf<FeatureColumn>()
 
     init {
-        if (Files.exists(file)) {
-            runCatching {
-                gson.fromJson<MutableList<Illust>>(Files.readString(file), type).orEmpty().forEach { items += it }
-            }
+        load()
+    }
+
+    @Synchronized
+    private fun load() {
+        if (!Files.exists(file)) return
+        runCatching {
+            gson.fromJson<MutableList<FeatureColumn>>(Files.readString(file), type)
+                .orEmpty()
+                .filter { it.kind.isNotBlank() && it.key.isNotBlank() }
+                .distinctBy { it.kind to it.key }
+        }.getOrDefault(emptyList()).forEach { items += it }
+    }
+
+    fun contains(column: FeatureColumn): Boolean = items.any { it.kind == column.kind && it.key == column.key }
+
+    fun add(column: FeatureColumn) {
+        if (column.kind.isBlank() || column.key.isBlank()) return
+        if (contains(column)) return
+        items.add(0, column)
+        persist()
+    }
+
+    fun remove(column: FeatureColumn) {
+        items.removeAll { it.kind == column.kind && it.key == column.key }
+        persist()
+    }
+
+    fun toggle(column: FeatureColumn): Boolean {
+        return if (contains(column)) {
+            remove(column)
+            false
+        } else {
+            add(column)
+            true
         }
     }
 
-    fun contains(id: Long): Boolean = items.any { it.id == id }
-
-    fun add(illust: Illust) {
-        if (contains(illust.id)) return
-        items.add(0, illust)
-        persist()
-    }
-
-    fun remove(id: Long) {
-        items.removeAll { it.id == id }
-        persist()
-    }
-
-    fun clear() {
-        items.clear()
-        persist()
-    }
-
+    @Synchronized
     private fun persist() {
         runCatching {
             Files.createDirectories(file.parent)
-            Files.writeString(file, gson.toJson(items.toList()))
+            val snapshot = items.toList().map { FeatureColumn(it.kind, it.key, it.title) }
+            val tmp = file.resolveSibling(file.fileName.toString() + ".tmp")
+            Files.writeString(tmp, gson.toJson(snapshot))
+            Files.move(
+                tmp,
+                file,
+                java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+            )
+        }.onFailure {
+            // ATOMIC_MOVE 在部分盘符上不可用，退回直接写
+            runCatching {
+                Files.createDirectories(file.parent)
+                Files.writeString(file, gson.toJson(items.toList().map { FeatureColumn(it.kind, it.key, it.title) }))
+            }
         }
+    }
+}
+
+/** 瀑布流批量选择控制器（批量下载模式）。 */
+class BatchSelection {
+    var active by androidx.compose.runtime.mutableStateOf(false)
+    val ids = androidx.compose.runtime.mutableStateListOf<Long>()
+
+    fun toggle(id: Long) {
+        if (ids.contains(id)) ids.remove(id) else ids.add(id)
+    }
+
+    fun reset() {
+        active = false
+        ids.clear()
     }
 }
 

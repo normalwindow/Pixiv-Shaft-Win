@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -38,19 +40,31 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.DoneAll
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material.icons.outlined.ViewColumn
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
@@ -68,6 +82,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import ceui.pixshaft.desktop.AppGraph
+import ceui.pixshaft.desktop.BatchSelection
+import ceui.pixshaft.desktop.FeatureColumn
 import ceui.pixshaft.shared.model.Illust
 import coil3.ImageLoader
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -100,9 +117,11 @@ fun IllustWaterfall(
     header: @Composable (() -> Unit)? = null,
     gridKey: Any = Unit,
     onToggleBookmark: ((Illust) -> Unit)? = null,
-    onAddBatch: ((Illust) -> Unit)? = null,
     onAddFeature: ((Illust) -> Unit)? = null,
     onHide: ((Illust) -> Unit)? = null,
+    batch: BatchSelection? = null,
+    onBatchDownload: ((List<Illust>) -> Unit)? = null,
+    onDownload: ((Illust) -> Unit)? = null,
 ) {
     val unique = illusts.uniqueIllusts()
     val ui = LocalDesktopSettings.current
@@ -132,9 +151,13 @@ fun IllustWaterfall(
     ) {
         val gap = if (chrome.split || ui.compactUi) 6.dp else 10.dp
         val pad = if (chrome.split || ui.compactUi) 8.dp else 12.dp
+        val requested = when {
+            columnsOverride in 1..16 -> columnsOverride
+            ui.lineCount in 1..16 -> ui.lineCount
+            else -> 0
+        }
         val columns = when {
-            columnsOverride in 1..8 ->
-                ((columnsOverride * zoom).roundToInt()).coerceIn(1, 16)
+            requested in 1..16 -> requested
             chrome.split -> (maxWidth.value * zoom / 150f).toInt().coerceIn(1, 4)
             else -> (maxWidth.value * zoom / if (ui.compactUi) 150f else 180f).toInt().coerceIn(1, 12)
         }
@@ -172,9 +195,10 @@ fun IllustWaterfall(
                     IllustCard(
                         illust, loader, onOpen, compact = chrome.split,
                         onToggleBookmark = onToggleBookmark,
-                        onAddBatch = onAddBatch,
                         onAddFeature = onAddFeature,
                         onHide = onHide,
+                        batch = batch,
+                        onDownload = onDownload,
                     )
                 }
                 if (loadingMore) {
@@ -200,9 +224,10 @@ fun IllustWaterfall(
                     IllustCard(
                         illust, loader, onOpen, forceSquare = true, compact = chrome.split,
                         onToggleBookmark = onToggleBookmark,
-                        onAddBatch = onAddBatch,
                         onAddFeature = onAddFeature,
                         onHide = onHide,
+                        batch = batch,
+                        onDownload = onDownload,
                     )
                 }
                 if (loadingMore) {
@@ -234,6 +259,37 @@ fun IllustWaterfall(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.align(Alignment.Center),
                 )
+            }
+        }
+        // 批量选择操作条
+        AnimatedVisibility(
+            visible = batch?.active == true && batch.ids.isNotEmpty() && onBatchDownload != null,
+            enter = fadeIn(tween(120)) + slideInVertically(tween(120)) { it / 2 },
+            exit = fadeOut(tween(120)) + slideOutVertically(tween(120)) { it / 2 },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 14.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(22.dp),
+                tonalElevation = 4.dp,
+                shadowElevation = 8.dp,
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        "已选 ${batch?.ids?.size ?: 0} 个",
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(end = 4.dp),
+                    )
+                    TextButton(onClick = {
+                        onBatchDownload?.invoke(unique.filter { batch?.ids?.contains(it.id) == true })
+                    }) { Text("全部下载") }
+                    TextButton(onClick = { batch?.reset() }) { Text("退出选择") }
+                }
             }
         }
         // 缩放指示器：百分比 + 加减 + 回到默认
@@ -326,9 +382,10 @@ private fun IllustCard(
     forceSquare: Boolean = false,
     compact: Boolean = false,
     onToggleBookmark: ((Illust) -> Unit)? = null,
-    onAddBatch: ((Illust) -> Unit)? = null,
     onAddFeature: ((Illust) -> Unit)? = null,
     onHide: ((Illust) -> Unit)? = null,
+    batch: BatchSelection? = null,
+    onDownload: ((Illust) -> Unit)? = null,
 ) {
     val ratio = if (forceSquare) {
         0.78f
@@ -344,9 +401,10 @@ private fun IllustCard(
         modifier = Modifier.fillMaxWidth().aspectRatio(ratio),
         compact = compact,
         onToggleBookmark = onToggleBookmark,
-        onAddBatch = onAddBatch,
         onAddFeature = onAddFeature,
         onHide = onHide,
+        batch = batch,
+        onDownload = onDownload,
     )
 }
 
@@ -359,9 +417,10 @@ private fun IllustPoster(
     modifier: Modifier = Modifier,
     compact: Boolean = false,
     onToggleBookmark: ((Illust) -> Unit)? = null,
-    onAddBatch: ((Illust) -> Unit)? = null,
     onAddFeature: ((Illust) -> Unit)? = null,
     onHide: ((Illust) -> Unit)? = null,
+    batch: BatchSelection? = null,
+    onDownload: ((Illust) -> Unit)? = null,
 ) {
     val policy = LocalImagePolicy.current
     val ui = LocalDesktopSettings.current
@@ -384,7 +443,9 @@ private fun IllustPoster(
                 else Modifier,
             )
             .onPointerSecondaryPress { menuOpen = true }
-            .clickable { onOpen(illust) },
+            .clickable {
+                if (batch?.active == true) batch.toggle(illust.id) else onOpen(illust)
+            },
     ) {
         Box(Modifier.fillMaxSize()) {
             PixivImage(
@@ -414,6 +475,31 @@ private fun IllustPoster(
                     if (illust.page_count > 1) BadgeChip("${illust.page_count}P")
                     if (illust.isR18()) BadgeChip("R-18")
                     if (illust.isAi()) BadgeChip("AI")
+                }
+            }
+            if (batch?.active == true) {
+                val picked = batch.ids.contains(illust.id)
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.4f))
+                        .then(
+                            if (picked) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            else Modifier.border(1.5.dp, Color.White.copy(alpha = 0.8f), CircleShape)
+                        ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (picked) {
+                        Icon(
+                            Icons.Outlined.Check,
+                            contentDescription = "已选择",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
                 }
             }
             // 收藏爱心（可在设置中隐藏）
@@ -460,8 +546,7 @@ private fun IllustPoster(
                 onDismiss = { menuOpen = false },
                 actions = IllustMenuActions(
                     onBookmark = onToggleBookmark?.let { fn -> ({ fn(illust) }) },
-                    onDownload = null,
-                    onAddBatch = onAddBatch?.let { fn -> ({ fn(illust) }) },
+                    onDownload = onDownload?.let { fn -> ({ fn(illust) }) },
                     onAddFeature = onAddFeature?.let { fn -> ({ fn(illust) }) },
                     onCopyIllustId = { copyToClipboard(illust.id.toString()) },
                     onOpenInBrowser = { runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI("https://www.pixiv.net/artworks/${illust.id}")) } },
@@ -494,5 +579,101 @@ private fun BadgeChip(text: String) {
         shape = RoundedCornerShape(6.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp))
+    }
+}
+
+/**
+ * 瀑布流页通用操作条：左侧自定义内容，右侧精华列 / 多选 / 列数 / 刷新。
+ */
+@Composable
+fun FeedActionRow(
+    graph: AppGraph,
+    batch: BatchSelection? = null,
+    feature: FeatureColumn? = null,
+    onRefresh: (() -> Unit)? = null,
+    onDownloadAll: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+        .fillMaxWidth()
+        .padding(start = 16.dp, end = 4.dp, top = 8.dp),
+    leading: @Composable RowScope.() -> Unit = {},
+) {
+    Row(
+        modifier,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        leading()
+        Spacer(Modifier.weight(1f))
+        if (feature != null) {
+            val added = graph.features.contains(feature)
+            IconButton(onClick = { graph.features.toggle(feature) }) {
+                Icon(
+                    if (added) Icons.Filled.Star else Icons.Outlined.StarBorder,
+                    contentDescription = if (added) "移出精华列" else "收入精华列",
+                    tint = if (added) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (onDownloadAll != null) {
+            IconButton(onClick = onDownloadAll) {
+                Icon(
+                    Icons.Outlined.Download,
+                    contentDescription = "全部加入下载队列",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (batch != null) {
+            IconButton(
+                onClick = {
+                    batch.active = !batch.active
+                    if (!batch.active) batch.reset()
+                },
+            ) {
+                Icon(
+                    Icons.Outlined.DoneAll,
+                    contentDescription = "批量选择",
+                    tint = if (batch.active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        ColumnCountButton(graph)
+        if (onRefresh != null) {
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Outlined.Refresh, contentDescription = "刷新")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ColumnCountButton(graph: AppGraph) {
+    var open by remember { mutableStateOf(false) }
+    val current = graph.settings.current.lineCount
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(
+                Icons.Outlined.ViewColumn,
+                contentDescription = "列数",
+                tint = if (current > 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(if (current == 0) "✓ 自动" else "自动") },
+                onClick = {
+                    graph.settings.update { it.copy(lineCount = 0) }
+                    open = false
+                },
+            )
+            (1..8).forEach { n ->
+                DropdownMenuItem(
+                    text = { Text(if (current == n) "✓ $n 列" else "$n 列") },
+                    onClick = {
+                        graph.settings.update { it.copy(lineCount = n) }
+                        open = false
+                    },
+                )
+            }
+        }
     }
 }

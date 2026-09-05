@@ -61,7 +61,6 @@ fun HorizontalWheelRow(
 data class IllustMenuActions(
     val onBookmark: (() -> Unit)? = null,
     val onDownload: (() -> Unit)? = null,
-    val onAddBatch: (() -> Unit)? = null,
     val onAddFeature: (() -> Unit)? = null,
     val onOpenUser: (() -> Unit)? = null,
     val onSearchTag: ((String) -> Unit)? = null,
@@ -89,9 +88,6 @@ fun IllustContextMenu(
         }
         actions.onDownload?.let {
             DropdownMenuItem(text = { Text("下载") }, onClick = { it(); onDismiss() })
-        }
-        actions.onAddBatch?.let {
-            DropdownMenuItem(text = { Text("加入批量下载") }, onClick = { it(); onDismiss() })
         }
         actions.onAddFeature?.let {
             DropdownMenuItem(text = { Text("收入精华列") }, onClick = { it(); onDismiss() })

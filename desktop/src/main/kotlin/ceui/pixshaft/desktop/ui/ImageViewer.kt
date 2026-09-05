@@ -230,6 +230,8 @@ fun ImagePreviewOverlay(
                         color = Color.White,
                         style = MaterialTheme.typography.titleMedium,
                         maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(end = 12.dp),
                     )
                 }
                 Text(
@@ -342,24 +344,22 @@ fun ImagePreviewOverlay(
             }
         }
 
-        androidx.compose.animation.AnimatedVisibility(
-            visible = hintVisible,
-            enter = androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.fadeOut(),
-        ) {
         AnimatedVisibility(
             visible = hintVisible,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomStart),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(
+                    start = 16.dp,
+                    bottom = if (request.urls.size > 1) 72.dp else 16.dp,
+                ),
         ) {
             Text(
                 "滚轮缩放 · 双击放大 · 拖动平移 · Esc 关闭",
-                color = Color.White.copy(alpha = 0.55f),
+                color = Color.White.copy(alpha = 0.7f),
                 style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(14.dp),
             )
-        }
         }
     }
 }

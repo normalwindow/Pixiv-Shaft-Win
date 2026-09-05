@@ -12,12 +12,16 @@
 
 <sub>Windows 10+ x64 · Kotlin + Compose Multiplatform · free & open source · no ads</sub>
 
-[English](README.en.md) | [简体中文](../README.md) | [日本語](README.ja.md)
+[简体中文](../README.md) · **English** · [日本語](README.ja.md)
+
+The Android app lives upstream at [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft).
 
 </div>
 
 > [!NOTE]
 > An unofficial third-party [Pixiv](https://www.pixiv.net) client, forked from [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft) (`classic` branch). All artworks belong to their creators and Pixiv. For learning and communication only.
+
+---
 
 ## What is this
 
@@ -32,7 +36,7 @@ Sign-in uses the system WebView2 (same approach as Pixeval). Networking defaults
 | Platform | Android 7.0+ | Windows 10+ x64 |
 | Stack | View + XML (classic) | Compose Multiplatform desktop |
 | Sidebar | Bottom bar / tablet rail | Hover-expanding rail (60dp strip → 196dp overlay, zero content shift) |
-| Browsing | Single pane navigation | Waterfall / two-pane with one-click pane swap |
+| Browsing | Single pane navigation | Waterfall jump / two-pane with one-click pane swap |
 | Zoom | Fixed columns | **Ctrl+wheel / pinch infinite zoom** (40%–300%, with ruler & reset) |
 | Continuity | Reload on back | Page data + scroll position cached — no refresh on back/switch |
 | Rankings | 19 boards + date | Same 19 boards + date picker |
@@ -50,13 +54,23 @@ Upstream Android features and screenshots: [upstream README](https://github.com/
 - **Ranking** — 19 boards with a calendar date picker for historical charts
 - **Following** — illust·manga / novels × all/public/private
 - **Search** — history + discover + sort / match / bookmark-count / R-18 filters (persisted)
-- **Artwork** — multi-page pager, ugoira autoplay, manga reader, related-works waterfall, collapsible image drawer, bookmark/download/follow automations
-- **User** — Illustrations / Manga / Bookmarks (public-private) / Following users / My-Pixiv friends
-- **Extras** — multi-account, reverse image search, network self-check, FANBOX, pixiv COMIC, local novels, local library, dark mode, 8 accent colors, i18n (zh/en/ja)
+- **Artwork** — multi-page pager, ugoira autoplay, manga reader, paginated related-works waterfall, comments (read & post), bookmark/download/follow automations
+- **User** — Illustrations / Manga / Bookmarks, collapsing author header, follow button
+- **Feature columns** — pin a search / author / following / related / ranking feed; they survive restart; click the card to open
+- **Downloads** — filename templates, per-author / R18 / AI folders, overwrite policy, concurrency, queue manager; feature columns can enqueue everything at once
+- **Extras** — multi-account, reverse image search, network self-check, FANBOX, pixiv COMIC, local novels, local library, dark mode, accent colors, custom title bar
 
 ## Install
 
-Grab from [GitHub Releases](https://github.com/normalwindow/Pixiv-Shaft-Win/releases): `PixShaft-Win-x.y.z.msi/.exe` (installer) or `-portable.zip` (portable). Sign in with WebView2 on first launch (WebView2 Runtime required, preinstalled on Windows 11).
+Grab from [GitHub Releases](https://github.com/normalwindow/Pixiv-Shaft-Win/releases):
+
+| File | Notes |
+|---|---|
+| `PixShaft-Win-x.y.z.msi` | Windows installer (recommended), Start Menu + uninstall |
+| `PixShaft-Win-x.y.z.exe` | Same installer as EXE |
+| `PixShaft-Win-x.y.z-portable.zip` | Portable; data lives next to the exe |
+
+Sign in with **WebView2** on first launch (WebView2 Runtime required, preinstalled on Windows 11).
 
 ## Build
 
@@ -67,7 +81,7 @@ set JAVA_HOME=C:\path\to\jdk-17
 gradlew.bat :desktop:packageReleaseDistributionForCurrentOS
 ```
 
-Requires **JDK 17**. Artifacts land in `desktop/build/compose/binaries/main-release/`. To just run: `gradlew.bat :desktop:run`.
+Requires **JDK 17**. `gradle.properties` still contains the upstream author's macOS toolchain paths — on other machines point `JAVA_HOME` at a local JDK 17, or pass `-Dorg.gradle.java.installations.paths=`. Artifacts land in `desktop/build/compose/binaries/main-release/`. To just run: `gradlew.bat :desktop:run`.
 
 ## Shortcuts
 
@@ -86,6 +100,22 @@ Requires **JDK 17**. Artifacts land in `desktop/build/compose/binaries/main-rele
 | ![home](../docs/screenshots/home.webp) | ![detail](../docs/screenshots/detail.webp) |
 | ![ranking](../docs/screenshots/ranking.webp) | ![search](../docs/screenshots/search.webp) |
 | ![user](../docs/screenshots/user.webp) | ![download](../docs/screenshots/download.webp) |
+
+## Layout
+
+```
+app/            Upstream Android app (kept as-is, tracks classic)
+shared/         Shared Pixiv App-API client, models, OAuth
+desktop/        Windows desktop client (main development)
+  ui/           Compose UI: nav, waterfall, detail, preview, settings…
+  net/          Network diagnostics
+  webview-auth/ WebView2 login helper (.NET 8)
+docs/           Protocol / architecture notes from upstream
+```
+
+## Syncing with upstream
+
+This repo's `classic` branch tracks upstream `classic`. Upstream commits are merged periodically; `shared/` and `app/` avoid breaking changes so merges stay possible. Desktop code lives in `desktop/` plus a few increments in `shared/`.
 
 ## Disclaimer
 
