@@ -6,7 +6,12 @@ import ceui.pixshaft.shared.model.ComicTopResponse
 import ceui.pixshaft.shared.model.FanboxCreatorListResponse
 import ceui.pixshaft.shared.model.FanboxPostDetailResponse
 import ceui.pixshaft.shared.model.FanboxPostListResponse
+import ceui.pixshaft.shared.model.PlazaFeedResponse
+import ceui.pixshaft.shared.model.PlazaLikeResponse
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Url
 
@@ -42,4 +47,19 @@ interface ShaftChatApi {
     suspend fun stats(
         @Query("room") room: String = "global",
     ): ChatStatsResponse
+}
+
+/** 探索广场（shaft-plaza-api）。读操作无需签名；带 viewer sig 时才返回 liked_by_viewer。 */
+interface PlazaApi {
+    @GET("api/v1/plaza/posts")
+    suspend fun feed(
+        @Query("before") before: Long? = null,
+        @Query("limit") limit: Int = 30,
+    ): PlazaFeedResponse
+
+    @POST("api/v1/plaza/posts/{id}/like")
+    suspend fun like(@Path("id") id: Long): PlazaLikeResponse
+
+    @DELETE("api/v1/plaza/posts/{id}/like")
+    suspend fun unlike(@Path("id") id: Long): PlazaLikeResponse
 }

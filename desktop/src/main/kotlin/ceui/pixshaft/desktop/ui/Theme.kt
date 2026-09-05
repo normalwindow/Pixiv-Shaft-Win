@@ -26,6 +26,9 @@ fun shaftAccent(index: Int): Color = when (index) {
     2 -> Color(0xFF12B5A8)
     3 -> Color(0xFFE85D75)
     4 -> Color(0xFFE8A317)
+    5 -> Color(0xFF39C46E)
+    6 -> Color(0xFFFF8A3D)
+    7 -> Color(0xFFE64A8C)
     else -> Color(0xFF3D7EFF)
 }
 

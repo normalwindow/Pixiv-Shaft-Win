@@ -1,6 +1,8 @@
 package ceui.pixshaft.desktop.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,19 +25,25 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Cancel
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Send
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -57,6 +65,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -193,27 +208,184 @@ fun ComicHomeScreen(graph: AppGraph, loader: ImageLoader) {
     }
 }
 
+/**
+ * 漫画阅读器：原图加载失败可切中等清晰度；适应宽度/整页、日漫右开、深色背景；
+ * 支持左右方向键翻页与点击图片左右半区翻页。
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun MangaReaderScreen(graph: AppGraph, id: Long, loader: ImageLoader) {
-    var pages by remember(id) { mutableStateOf<List<String>>(emptyList()) }
+    var detail by remember(id) { mutableStateOf<Illust?>(null) }
+    var loading by remember(id) { mutableStateOf(true) }
+    var error by remember(id) { mutableStateOf<String?>(null) }
     var index by remember(id) { mutableStateOf(0) }
+    var quality by remember(id) { mutableStateOf(0) } // 0 原图 1 中等
+    var menuOpen by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val snackbar = remember { androidx.compose.material3.SnackbarHostState() }
+    val s = graph.settings.current
+
     LaunchedEffect(id) {
+        loading = true
         runCatching { withContext(Dispatchers.IO) { graph.client.api.illustDetail(id).illust } }
-            .onSuccess { pages = it?.pageUrls().orEmpty() }
+            .onSuccess { d ->
+                detail = d
+                if (d == null || d.pageUrls().isEmpty()) error = "没有可读的页面"
+            }
+            .onFailure { error = it.userMessage() }
+        loading = false
     }
-    Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("漫画阅读器 ${index + 1}/${pages.size.coerceAtLeast(1)}", style = MaterialTheme.typography.titleMedium)
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            val url = pages.getOrNull(index)
-            if (url != null) {
-                PixivImage(url, "page $index", loader = loader, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+
+    val originals = detail?.pageUrls().orEmpty()
+    val mediums = detail?.viewUrls().orEmpty()
+    val pages = if (quality == 0 && originals.isNotEmpty()) originals else mediums.ifEmpty { originals }
+    val total = pages.size
+    val rtl = s.readerRtl
+
+    fun turn(delta: Int) {
+        if (total == 0) return
+        val next = (index + delta * (if (rtl) -1 else 1)).coerceIn(0, total - 1)
+        index = next
+    }
+
+    val bgColor = if (s.readerDarkBg) Color(0xFF0E0E12) else MaterialTheme.colorScheme.background
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(bgColor)
+            .onPreviewKeyEvent { event ->
+                if (event.type != androidx.compose.ui.input.key.KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    androidx.compose.ui.input.key.Key.DirectionLeft -> { turn(if (rtl) 1 else -1); true }
+                    androidx.compose.ui.input.key.Key.DirectionRight -> { turn(if (rtl) -1 else 1); true }
+                    else -> false
+                }
+            },
+    ) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    detail?.title ?: "漫画阅读器",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (s.readerDarkBg) Color.White else MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    if (total > 0) "${index + 1} / $total" else error ?: "加载中…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (s.readerDarkBg) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = { quality = if (quality == 0) 1 else 0 }) {
+                Text(if (quality == 0) "原图" else "中等", color = if (s.readerDarkBg) Color.White else MaterialTheme.colorScheme.onSurface)
+            }
+            Box {
+                IconButton(onClick = { menuOpen = true }) {
+                    Icon(
+                        Icons.Outlined.Settings,
+                        contentDescription = "阅读设置",
+                        tint = if (s.readerDarkBg) Color.White else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(if (s.readerFit == 0) "适应：宽度 ✓" else "适应：宽度") },
+                        onClick = { graph.settings.update { it.copy(readerFit = 0) }; menuOpen = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (s.readerFit == 1) "适应：整页 ✓" else "适应：整页") },
+                        onClick = { graph.settings.update { it.copy(readerFit = 1) }; menuOpen = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (s.readerRtl) "方向：日漫右开 ✓" else "方向：从左到右") },
+                        onClick = { graph.settings.update { it.copy(readerRtl = !s.readerRtl) }; menuOpen = false },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(if (s.readerDarkBg) "背景：深色 ✓" else "背景：浅色") },
+                        onClick = { graph.settings.update { it.copy(readerDarkBg = !s.readerDarkBg) }; menuOpen = false },
+                    )
+                }
             }
         }
-        Row {
-            Button(onClick = { index = (index - 1).coerceAtLeast(0) }, enabled = index > 0) { Text("上一页") }
-            Spacer(Modifier.width(12.dp))
-            Button(onClick = { index = (index + 1).coerceAtMost((pages.size - 1).coerceAtLeast(0)) }, enabled = index < pages.lastIndex) { Text("下一页") }
+        Box(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .pointerInput(pages, rtl) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            if (event.type == PointerEventType.Press && event.buttons.isPrimaryPressed) {
+                                val w = size.width
+                                val x = event.changes.firstOrNull()?.position?.x ?: return@awaitPointerEventScope
+                                turn(if (x < w / 2) -1 else 1)
+                                event.changes.forEach { it.consume() }
+                            }
+                        }
+                    }
+                },
+        ) {
+            val url = pages.getOrNull(index)
+            when {
+                loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                url != null -> LoadableImage(
+                    url = url,
+                    contentDescription = "第 ${index + 1} 页",
+                    contentScale = if (s.readerFit == 0) ContentScale.FillWidth else ContentScale.Fit,
+                    loader = loader,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                !error.isNullOrBlank() -> Column(
+                    Modifier.align(Alignment.Center).padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(error!!, color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(8.dp))
+                    FilledTonalButton(onClick = {
+                        scope.launch {
+                            error = null
+                            loading = true
+                            runCatching { withContext(Dispatchers.IO) { graph.client.api.illustDetail(id).illust } }
+                                .onSuccess { detail = it; if (it == null) error = "没有可读的页面" }
+                                .onFailure { error = it.userMessage() }
+                            loading = false
+                        }
+                    }) { Text("重试") }
+                }
+            }
+            if (total > 0) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color.Black.copy(alpha = 0.45f),
+                    modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+                ) {
+                    Text(
+                        "${index + 1} / $total",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    )
+                }
+            }
         }
+        Row(
+            Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilledTonalButton(
+                onClick = { turn(-1) },
+                enabled = if (rtl) index < total - 1 else index > 0,
+            ) { Text(if (rtl) "下一页" else "上一页") }
+            Spacer(Modifier.width(12.dp))
+            FilledTonalButton(
+                onClick = { turn(1) },
+                enabled = if (rtl) index > 0 else index < total - 1,
+            ) { Text(if (rtl) "上一页" else "下一页") }
+        }
+        androidx.compose.material3.SnackbarHost(snackbar)
     }
 }
 
@@ -647,14 +819,24 @@ fun LibraryScreen(graph: AppGraph, onOpen: (Long) -> Unit) {
     }
 }
 
-/** 下载管理：暂停 / 继续、单任务重试与移除、批量重试、打开文件夹。 */
+/** 下载管理：筛选分组、进度条、暂停/继续、单任务取消/重试/移除、批量重试、打开文件夹。 */
 @Composable
 fun DownloadQueueScreen(graph: AppGraph) {
     val queue = graph.queue
     val jobs = queue.jobs
+    val scope = rememberCoroutineScope()
+    var filter by remember { mutableStateOf("all") }
+    var snackbarLocal by remember { mutableStateOf("") }
+    val filtered = when (filter) {
+        "running" -> jobs.filter { it.status == "running" }
+        "pending" -> jobs.filter { it.status == "pending" }
+        "done" -> jobs.filter { it.status == "done" }
+        "error" -> jobs.filter { it.status == "error" || it.status == "canceled" }
+        else -> jobs.toList()
+    }
     val running = jobs.count { it.status == "running" }
     val pending = jobs.count { it.status == "pending" }
-    val failed = jobs.count { it.status == "error" }
+    val failed = jobs.count { it.status == "error" || it.status == "canceled" }
     val done = jobs.count { it.status == "done" }
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -666,10 +848,7 @@ fun DownloadQueueScreen(graph: AppGraph) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            IconButton(
-                onClick = { queue.pause(!queue.paused) },
-                enabled = jobs.isNotEmpty() && !queue.paused || pending > 0,
-            ) {
+            IconButton(onClick = { queue.pause(!queue.paused) }, enabled = jobs.isNotEmpty()) {
                 Icon(
                     if (queue.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
                     contentDescription = if (queue.paused) "继续" else "暂停",
@@ -678,55 +857,135 @@ fun DownloadQueueScreen(graph: AppGraph) {
             TextButton(onClick = { queue.retryAllFailed() }, enabled = failed > 0) { Text("全部重试") }
             TextButton(onClick = { queue.clearFinished() }, enabled = done > 0 || failed > 0) { Text("清除已完成") }
         }
-        Spacer(Modifier.height(8.dp))
-        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(jobs.toList(), key = { it.id }) { job ->
-                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                        val (icon, tint) = when (job.status) {
-                            "running" -> Icons.Outlined.Download to MaterialTheme.colorScheme.primary
-                            "done" -> Icons.Outlined.CheckCircle to Color(0xFF2BB673)
-                            "error" -> Icons.Outlined.ErrorOutline to MaterialTheme.colorScheme.error
-                            else -> Icons.Outlined.Schedule to MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-                        Icon(icon, contentDescription = job.status, tint = tint)
-                        Spacer(Modifier.width(10.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "${job.title}  (#${job.illustId})",
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            val detail = when (job.status) {
-                                "pending" -> "${job.urls.size} 张 · 等待中" + if (queue.paused) "（已暂停）" else ""
-                                "running" -> "${job.urls.size} 张 · 下载中…"
-                                "done" -> "已完成"
-                                else -> "失败：${job.error.orEmpty()}"
+        // 批量下载清单：卡片右键“加入批量下载”收集到此，一键全部入队
+        if (graph.batch.items.isNotEmpty()) {
+            Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "批量清单（${graph.batch.items.size}）",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f),
+                        )
+                        TextButton(onClick = {
+                            graph.batch.items.forEach { graph.queue.enqueue(it) }
+                            scope.launch { snackbarLocal = "已全部加入下载队列" }
+                            graph.batch.clear()
+                        }) { Text("全部下载") }
+                        TextButton(onClick = { graph.batch.clear() }) { Text("清空") }
+                    }
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        graph.batch.items.forEach { b ->
+                            Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                                Row(
+                                    Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        b.title ?: "#${b.id}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 120.dp),
+                                    )
+                                    Icon(
+                                        Icons.Outlined.Close,
+                                        contentDescription = "移除",
+                                        modifier = Modifier
+                                            .size(14.dp)
+                                            .clickable { graph.batch.remove(b.id) },
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
                             }
-                            Text(
-                                detail,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (job.status == "error") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
                         }
-                        if (job.status == "done") {
-                            TextButton(onClick = {
-                                val dir = graph.settings.current.resolvedIllustDir(
-                                    Illust(id = job.illustId, title = job.title, page_count = job.urls.size),
+                    }
+                    if (snackbarLocal.isNotBlank()) {
+                        Text(snackbarLocal, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            }
+        }
+        HorizontalWheelRow(
+            Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        ) {
+            listOf(
+                "all" to "全部(${jobs.size})",
+                "running" to "进行中($running)",
+                "pending" to "等待($pending)",
+                "done" to "已完成($done)",
+                "error" to "失败($failed)",
+            ).forEach { (value, label) ->
+                FilterChip(
+                    selected = filter == value,
+                    onClick = { filter = value },
+                    label = { Text(label) },
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+            }
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(filtered, key = { it.id }) { job ->
+                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val (icon, tint) = when (job.status) {
+                                "running" -> Icons.Outlined.Download to MaterialTheme.colorScheme.primary
+                                "done" -> Icons.Outlined.CheckCircle to Color(0xFF2BB673)
+                                "error" -> Icons.Outlined.ErrorOutline to MaterialTheme.colorScheme.error
+                                "canceled" -> Icons.Outlined.Cancel to MaterialTheme.colorScheme.onSurfaceVariant
+                                else -> Icons.Outlined.Schedule to MaterialTheme.colorScheme.onSurfaceVariant
+                            }
+                            Icon(icon, contentDescription = job.status, tint = tint)
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "${job.title}  (#${job.illustId})",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
-                                runCatching { Desktop.getDesktop().open(dir.toFile()) }
-                            }) { Text("打开文件夹") }
+                                val detail = when (job.status) {
+                                    "pending" -> "等待中" + if (queue.paused) "（已暂停）" else ""
+                                    "running" -> "下载中… ${job.finished}/${job.total}"
+                                    "done" -> "已完成 · ${job.total} 张"
+                                    "canceled" -> "已取消"
+                                    else -> "失败：${job.error.orEmpty()}"
+                                }
+                                Text(
+                                    detail,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (job.status == "error") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            if (job.status == "running" || job.status == "pending") {
+                                TextButton(onClick = { queue.cancel(job) }) { Text("取消") }
+                            }
+                            if (job.status == "done") {
+                                TextButton(onClick = {
+                                    val dir = graph.settings.current.resolvedIllustDir(
+                                        Illust(id = job.illustId, title = job.title, page_count = job.urls.size),
+                                    )
+                                    runCatching { Desktop.getDesktop().open(dir.toFile()) }
+                                }) { Text("打开文件夹") }
+                            }
+                            if (job.status == "error" || job.status == "canceled") {
+                                TextButton(onClick = { queue.retry(job) }) { Text("重试") }
+                            }
+                            IconButton(onClick = { queue.remove(job) }, modifier = Modifier.size(32.dp)) {
+                                Icon(
+                                    Icons.Outlined.Close,
+                                    contentDescription = "移除",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
-                        if (job.status == "error") {
-                            TextButton(onClick = { queue.retry(job) }) { Text("重试") }
-                        }
-                        IconButton(onClick = { queue.remove(job) }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                Icons.Outlined.Close,
-                                contentDescription = "移除",
-                                modifier = Modifier.size(16.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        if (job.status == "running" && job.total > 0) {
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { job.finished.toFloat() / job.total },
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             )
                         }
                     }
@@ -784,5 +1043,230 @@ fun AccountsScreen(graph: AppGraph, onSwitched: () -> Unit) {
             }
         }
         if (store.accounts.isEmpty()) Text("还没有保存的账号。登录后会自动加入。")
+    }
+}
+
+/** 探索广场：shaft-plaza-api 的社区帖子流（文本 + 插画/小说/用户引用，可点赞）。 */
+@Composable
+fun PlazaScreen(
+    graph: AppGraph,
+    loader: ImageLoader,
+    onOpenIllust: (Long) -> Unit,
+    onOpenUser: (Long) -> Unit,
+    onOpenNovel: (Long) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val posts = remember { mutableStateListOf<ceui.pixshaft.shared.model.PlazaPost>() }
+    var nextBefore by remember { mutableStateOf<Long?>(null) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var likeError by remember { mutableStateOf<String?>(null) }
+    val timeFmt = remember { java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm") }
+
+    fun load(reset: Boolean) {
+        scope.launch {
+            loading = true
+            runCatching {
+                withContext(Dispatchers.IO) { graph.client.plazaApi.feed(before = if (reset) null else nextBefore) }
+            }.onSuccess { resp ->
+                if (reset) posts.clear()
+                posts.addAll(resp.items)
+                nextBefore = resp.next_before
+                error = null
+            }.onFailure { error = it.userMessage() }
+            loading = false
+        }
+    }
+    LaunchedEffect(Unit) { load(true) }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("探索广场", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "Shaft 社区动态 · 分享作品与发现",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { load(true) }) { Icon(Icons.Outlined.Refresh, contentDescription = "刷新") }
+        }
+        if (!likeError.isNullOrBlank()) {
+            Text(
+                likeError!!,
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp), contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+            items(posts, key = { it.id }) { post ->
+                Surface(shape = RoundedCornerShape(14.dp), tonalElevation = 1.dp) {
+                    Column(Modifier.fillMaxWidth().padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                post.display_name ?: "uid ${post.uid}",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                timeFmt.format(Instant.ofEpochMilli(post.ts).atZone(ZoneId.systemDefault())),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (post.text.isNotBlank()) {
+                            Text(post.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
+                        }
+                        if (post.refs.illust.isNotEmpty()) {
+                            Row(
+                                Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                post.refs.illust.forEach { ref ->
+                                    Column(
+                                        Modifier
+                                            .width(96.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { ref.meta?.target_id?.let(onOpenIllust) },
+                                    ) {
+                                        PixivImage(
+                                            url = ref.meta?.thumb_url,
+                                            contentDescription = ref.meta?.title,
+                                            loader = loader,
+                                            modifier = Modifier.fillMaxWidth().height(96.dp),
+                                        )
+                                        Text(
+                                            ref.meta?.title.orEmpty(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 2.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        post.refs.novel.forEach { ref ->
+                            Text(
+                                "📖 ${ref.meta?.title.orEmpty()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 6.dp).clickable { ref.meta?.target_id?.let(onOpenNovel) },
+                            )
+                        }
+                        post.refs.user.forEach { ref ->
+                            Text(
+                                "@${ref.meta?.name.orEmpty()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(top = 4.dp).clickable { ref.meta?.target_id?.let(onOpenUser) },
+                            )
+                        }
+                        Row(
+                            Modifier.padding(top = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                "♥ ${post.like_count}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (post.liked_by_viewer == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable {
+                                        scope.launch {
+                                            runCatching {
+                                                withContext(Dispatchers.IO) {
+                                                    if (post.liked_by_viewer == true) graph.client.plazaApi.unlike(post.id)
+                                                    else graph.client.plazaApi.like(post.id)
+                                                }
+                                            }.onSuccess { resp ->
+                                                val i = posts.indexOfFirst { it.id == post.id }
+                                                if (i >= 0) {
+                                                    posts[i] = posts[i].copy(
+                                                        like_count = resp.like_count,
+                                                        liked_by_viewer = resp.added ?: (resp.removed == false),
+                                                    )
+                                                }
+                                                likeError = null
+                                            }.onFailure {
+                                                likeError = "点赞失败：${it.message.orEmpty()}（可能需要 SHAFT_EVENTS_HMAC）"
+                                            }
+                                        }
+                                    }
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                            )
+                            Text(
+                                "💬 ${post.comment_count}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+            if (nextBefore != null && posts.isNotEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
+                        TextButton(onClick = { load(false) }) { Text("加载更多") }
+                    }
+                }
+            }
+            if (loading && posts.isEmpty()) {
+                item { Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+            }
+            if (!error.isNullOrBlank() && posts.isEmpty()) {
+                item { Text(error!!, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp)) }
+            }
+        }
+    }
+}
+
+/** 发现：从浏览历史里随机重新挖掘看过的作品。 */
+@Composable
+fun DiscoveryScreen(
+    graph: AppGraph,
+    loader: ImageLoader,
+    onOpen: (Illust) -> Unit,
+) {
+    var seed by remember { mutableStateOf(0) }
+    var items by remember(seed) { mutableStateOf(graph.history.list().shuffled(java.util.Random(seed.toLong())).take(40)) }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text("发现", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "从你的浏览历史里随机重新挖掘——换个角度再看一遍",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            IconButton(onClick = { seed += 1 }) { Icon(Icons.Outlined.Refresh, contentDescription = "换一批") }
+        }
+        IllustWaterfall(
+            illusts = items,
+            loading = false,
+            error = null,
+            loader = loader,
+            onOpen = onOpen,
+            header = {
+                if (items.isEmpty()) {
+                    Text(
+                        "浏览历史还是空的——先去看几幅作品吧",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            },
+        )
     }
 }

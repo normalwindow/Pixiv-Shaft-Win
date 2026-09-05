@@ -52,7 +52,7 @@ fun main(args: Array<String>) {
                     Runtime.getRuntime().halt(0)
                 }, "pixshaft-halt").start()
             },
-            title = "PixShaft",
+            title = "PixShaft-Win",
             icon = icon,
             state = state,
         ) {

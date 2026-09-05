@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,11 +48,12 @@ fun UserScreen(
     loader: ImageLoader,
     snackbar: SnackbarHostState,
     onOpenIllust: (Illust) -> Unit,
+    onOpenUser: (Long) -> Unit = {},
 ) {
     var detail by remember(userId) { mutableStateOf<ceui.pixshaft.shared.model.UserDetail?>(null) }
     var detailLoading by remember(userId) { mutableStateOf(true) }
     var tab by rememberSaveable(userId) { mutableStateOf(0) }
-    var bookmarkRestrict by rememberSaveable(userId) { mutableStateOf("public") }
+    var bookmarkRestrict by rememberSaveable(userId) { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(userId) {
@@ -140,11 +142,11 @@ fun UserScreen(
                 onOpenIllust = onOpenIllust,
             )
             else -> Column(Modifier.fillMaxSize()) {
-                Row(
+                // 公开 / 私人 = 该用户的收藏；关注的用户 / 好P友 = 用户列表（与公开、私人并行）
+                HorizontalWheelRow(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
                 ) {
-                    listOf("public" to "公开", "private" to "私人").forEach { (value, label) ->
+                    listOf(0 to "公开", 1 to "私人", 2 to "关注的用户", 3 to "好P友").forEach { (value, label) ->
                         FilterChip(
                             selected = bookmarkRestrict == value,
                             onClick = { bookmarkRestrict = value },
@@ -152,17 +154,35 @@ fun UserScreen(
                         )
                     }
                 }
-                val uid = userId
-                SimpleFeedPage(
-                    graph = graph,
-                    loader = loader,
-                    load = { graph.client.api.userBookmarks(uid, bookmarkRestrict) },
-                    onOpen = onOpenIllust,
-                    loadMore = { url -> graph.client.api.nextIllusts(url) },
-                    key = bookmarkRestrict,
-                    cacheKey = "user-bookmarks:$uid:$bookmarkRestrict",
-                    gridKey = bookmarkRestrict,
-                )
+                when (bookmarkRestrict) {
+                    0, 1 -> {
+                        val restrict = if (bookmarkRestrict == 0) "public" else "private"
+                        SimpleFeedPage(
+                            graph = graph,
+                            loader = loader,
+                            load = { graph.client.api.userBookmarks(userId, restrict) },
+                            onOpen = onOpenIllust,
+                            loadMore = { url -> graph.client.api.nextIllusts(url) },
+                            key = restrict,
+                            cacheKey = "user-bookmarks:$userId:$restrict",
+                            gridKey = restrict,
+                        )
+                    }
+                    2 -> UserListScreen(
+                        graph = graph,
+                        loader = loader,
+                        load = { graph.client.api.followingUsers(userId) },
+                        onOpenUser = onOpenUser,
+                        key = "$userId:following",
+                    )
+                    else -> UserListScreen(
+                        graph = graph,
+                        loader = loader,
+                        load = { graph.client.api.userMyPixiv(userId) },
+                        onOpenUser = onOpenUser,
+                        key = "$userId:mypixiv",
+                    )
+                }
             }
         }
     }

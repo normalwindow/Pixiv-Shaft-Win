@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="560" viewBox="0 0 1200 560" role="img" aria-label="PixShaft-Win — 把整个 Pixiv 搬上 Windows 桌面">
+<title>PixShaft-Win — 把整个 Pixiv 搬上 Windows 桌面</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#12122a"/><stop offset="1" stop-color="#1a1230"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7c6cff"/><stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="text" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#d9d4ff"/><stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <radialGradient id="a1" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#7c6cff" stop-opacity=".55"/><stop offset="1" stop-color="#7c6cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="a2" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#22d3ee" stop-opacity=".4"/><stop offset="1" stop-color="#22d3ee" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="a3" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#f6339a" stop-opacity=".3"/><stop offset="1" stop-color="#f6339a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="card" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".10"/><stop offset="1" stop-color="#ffffff" stop-opacity=".04"/>
+    </linearGradient>
+    <filter id="blur" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="46"/></filter>
+  </defs>
+
+  <rect width="1200" height="560" rx="0" fill="url(#bg)"/>
+  <circle cx="240" cy="120" r="200" fill="url(#a1)" filter="url(#blur)"/>
+  <circle cx="1020" cy="120" r="180" fill="url(#a2)" filter="url(#blur)"/>
+  <circle cx="700" cy="500" r="220" fill="url(#a3)" filter="url(#blur)"/>
+
+  <!-- 左侧文案 -->
+  <text x="72" y="150" font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="30" font-weight="800" fill="url(#brand)">PixShaft-Win</text>
+  <text x="72" y="230" font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="54" font-weight="800" fill="url(#text)" letter-spacing="-1">把整个 Pixiv</text>
+  <text x="72" y="296" font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="54" font-weight="800" fill="url(#text)" letter-spacing="-1">搬上 Windows 桌面</text>
+  <text x="72" y="342" font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" fill-opacity=".72">原生 Compose 桌面客户端 · 瀑布流 / 左右分栏 · 无极缩放</text>
+  <text x="72" y="366" font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="15" fill="#ffffff" fill-opacity=".72">页面缓存不刷新 · 下载队列 · 中国大陆可直连</text>
+
+  <g font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" font-weight="600">
+    <rect x="72" y="394" width="92" height="30" rx="15" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+    <text x="88" y="414" fill="#ffffff" fill-opacity=".9">无极缩放</text>
+    <rect x="174" y="394" width="92" height="30" rx="15" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+    <text x="190" y="414" fill="#ffffff" fill-opacity=".9">页面缓存</text>
+    <rect x="276" y="394" width="92" height="30" rx="15" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+    <text x="292" y="414" fill="#ffffff" fill-opacity=".9">批量下载</text>
+    <rect x="378" y="394" width="92" height="30" rx="15" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+    <text x="394" y="414" fill="#ffffff" fill-opacity=".9">多页预览</text>
+  </g>
+
+  <text x="72" y="500" font-family="Inter, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif" font-size="13" fill="#ffffff" fill-opacity=".5">Windows 10+ x64  ·  WebView2 登录  ·  开源 GPL-2  ·  与安卓版 Pixiv-Shaft 同源</text>
+
+  <!-- 右侧应用窗口模型（纯矢量） -->
+  <g transform="translate(640 92)">
+    <rect x="0" y="0" width="496" height="380" rx="14" fill="#141420" stroke="#ffffff" stroke-opacity=".14"/>
+    <rect x="0" y="0" width="496" height="30" rx="14" fill="#ffffff" fill-opacity=".06"/>
+    <circle cx="18" cy="15" r="4.5" fill="#ff5f57"/><circle cx="34" cy="15" r="4.5" fill="#febc2e"/><circle cx="50" cy="15" r="4.5" fill="#28c840"/>
+    <rect x="330" y="9" width="150" height="12" rx="6" fill="#ffffff" fill-opacity=".08"/>
+    <!-- 侧栏 -->
+    <rect x="0" y="30" width="52" height="350" fill="#ffffff" fill-opacity=".04"/>
+    <g fill="#ffffff" fill-opacity=".22">
+      <rect x="14" y="52" width="24" height="24" rx="7"/><rect x="14" y="92" width="24" height="24" rx="7"/><rect x="14" y="132" width="24" height="24" rx="7"/>
+    </g>
+    <rect x="14" y="172" width="24" height="24" rx="7" fill="url(#brand)"/>
+    <!-- 瀑布流三列 -->
+    <g>
+      <rect x="68" y="46" width="130" height="150" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="206" y="46" width="130" height="96" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="344" y="46" width="130" height="128" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="68" y="204" width="130" height="90" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="206" y="150" width="130" height="150" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="344" y="182" width="130" height="86" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="68" y="302" width="130" height="62" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="206" y="308" width="130" height="56" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+      <rect x="344" y="276" width="130" height="88" rx="8" fill="url(#card)" stroke="#ffffff" stroke-opacity=".1"/>
+    </g>
+    <!-- 高亮卡片：详情浮层 -->
+    <g transform="translate(96 84)">
+      <rect x="0" y="0" width="74" height="74" rx="8" fill="url(#brand)" fill-opacity=".9"/>
+      <circle cx="37" cy="30" r="14" fill="#ffffff" fill-opacity=".5"/>
+      <rect x="14" y="50" width="46" height="5" rx="2.5" fill="#ffffff" fill-opacity=".6"/>
+      <rect x="20" y="60" width="34" height="5" rx="2.5" fill="#ffffff" fill-opacity=".35"/>
+    </g>
+    <!-- 缩放指示 -->
+    <g transform="translate(158 348)">
+      <rect x="0" y="0" width="150" height="26" rx="13" fill="#000000" fill-opacity=".45"/>
+      <text x="75" y="17" text-anchor="middle" font-family="Inter, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#ffffff">Ctrl+滚轮 · 142%</text>
+    </g>
+  </g>
+</svg>

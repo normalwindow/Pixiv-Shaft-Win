@@ -27,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -88,8 +89,22 @@ fun ImagePreviewOverlay(
     var scale by remember(request) { mutableStateOf(1f) }
     var offset by remember(request) { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    var hintVisible by remember(request) { mutableStateOf(true) }
+    var hintTick by remember(request) { mutableIntStateOf(0) }
+    LaunchedEffect(hintTick) {
+        if (hintTick > 0) {
+            kotlinx.coroutines.delay(4000)
+            hintVisible = false
+        }
+    }
+
+    fun poke() {
+        hintVisible = true
+        hintTick++
+    }
 
     fun zoomTo(centroid: Offset, ratio: Float) {
+        poke()
         val newScale = (scale * ratio).coerceIn(1f, MAX_SCALE)
         if (newScale == 1f) {
             scale = 1f
@@ -196,7 +211,7 @@ fun ImagePreviewOverlay(
                     .padding(14.dp)
                     .size(44.dp),
             ) {
-                IconButton(onClick = { index = (index - 1).coerceAtLeast(0) }, enabled = index > 0) {
+                IconButton(onClick = { poke(); index = (index - 1).coerceAtLeast(0) }, enabled = index > 0) {
                     Icon(
                         Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
                         contentDescription = "上一张",
@@ -213,7 +228,7 @@ fun ImagePreviewOverlay(
                     .size(44.dp),
             ) {
                 IconButton(
-                    onClick = { index = (index + 1).coerceAtMost(request.urls.lastIndex) },
+                    onClick = { poke(); index = (index + 1).coerceAtMost(request.urls.lastIndex) },
                     enabled = index < request.urls.lastIndex,
                 ) {
                     Icon(
@@ -243,7 +258,7 @@ fun ImagePreviewOverlay(
                                 if (selected) Color.White else Color.White.copy(alpha = 0.35f),
                                 RoundedCornerShape(8.dp),
                             )
-                            .clickable { index = i },
+                            .clickable { poke(); index = i },
                     ) {
                         PixivImage(
                             url = url,
@@ -258,6 +273,11 @@ fun ImagePreviewOverlay(
             }
         }
 
+        androidx.compose.animation.AnimatedVisibility(
+            visible = hintVisible,
+            enter = androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.fadeOut(),
+        ) {
         Text(
             "滚轮缩放 · 拖动平移 · Esc 关闭",
             color = Color.White.copy(alpha = 0.55f),
@@ -266,5 +286,6 @@ fun ImagePreviewOverlay(
                 .align(Alignment.BottomStart)
                 .padding(14.dp),
         )
+        }
     }
 }

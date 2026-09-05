@@ -1,106 +1,63 @@
-# Shaft-Win (サードパーティPixivクライアント)
-[![release](https://img.shields.io/github/v/release/normalwindow/Pixiv-Shaft-Win)](https://github.com/normalwindow/Pixiv-Shaft-Win/releases/latest)
-[![build status](https://img.shields.io/github/actions/workflow/status/normalwindow/Pixiv-Shaft-Win/gradle.yml?branch=classic)](https://github.com/normalwindow/Pixiv-Shaft-Win/actions)
-[![open issues](https://img.shields.io/github/issues/normalwindow/Pixiv-Shaft-Win?color=brightgreen)](https://github.com/normalwindow/Pixiv-Shaft-Win/issues?q=is%3Aopen+is%3Aissue)
-[![license](https://img.shields.io/github/license/normalwindow/Pixiv-Shaft-Win)](https://github.com/normalwindow/Pixiv-Shaft-Win/blob/classic/LICENSE)
+<div align="center">
 
-[English](../README.md) | [简体中文](./README.zh-CN.md) | **日本語**
-
-* このアプリは [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft) の `classic` ブランチのフォークです。非公式の Pixiv クライアントに、タブレット / PC 向けワイド画面 UI と、ネイティブ Windows（x64 / ARM64）クライアントのロードマップを加えたものです。
-* このプロジェクトはオープンソースであり、当アプリを商業目的で使用することにより発生する責任に関し、一切の責任を負いません。
-* アプリ内のすべてのイラスト、漫画、小説の著作権は作者またはPixivに帰属します。
-* このアプリは非公式のものです。可能な限り公式のPixivアプリを使用することをお勧めします。
-* 上流とのマージ手順は [docs/upstream-sync.md](../docs/upstream-sync.md) を参照してください。
-
-## 1.機能
-
-* ログインと会員登録
-* アプリ内VPN（詳しくは[Pix-EzViewer](https://github.com/Notsfsssf/Pix-EzViewer)をご確認ください）
-* 非ログインでの人気順表示
-* GIFの表示・保存
-* 閲覧履歴の表示と保存
-* マルチアカウント
-* おすすめイラスト・漫画・小説・タグの表示
-* イラスト、漫画、小説を人気順・新しい順・古い順で検索
-* コメントの閲覧・送信・返信
-* 一括ダウンロードとダウンロードリンクの表示
-* 小説の閲覧
-* Pixivision
-* R-18コンテンツの閲覧（Pixiv側での設定が必要）
-* スパムコメントのフィルタリング(初期状態では無効)
-* ダークモード
-* ワイド画面（`sw ≥ 840dp`）ではボトムバーが Navigation Rail になり、列数はペイン幅に合わせて自動（2–8）
-* 外付けキーボード：J/K 次/前、F ブックマーク、Ctrl+S ダウンロード、Ctrl+F 検索、Esc、1–5 タブ切替
-
-## 2.特徴
-
-* 様々なクライアントの「いいとこ取り」をした使いやすいUI
-* 「人気順」表示
-* スムーズなアニメーション
-* 操作が簡単
-* 小説の閲覧に対応
-* 多言語対応
-
-## 3.スクリーンショット
-
-
-|イラスト表示ページ|おすすめの小説|コメント欄|
-|:---:|:---:|:---:|
-|![](https://github.com/CeuiLiSA/Pixiv-Shaft/blob/master/snap/ja/illust.jpg)|![](https://github.com/CeuiLiSA/Pixiv-Shaft/blob/master/snap/QQ20200106-1.jpg)|![](https://github.com/CeuiLiSA/Pixiv-Shaft/blob/master/snap/ja/comment.jpg)
-
-
-|新着作品のタブ|イラスト表示ページ|人気のタグ|
-|:---:|:---:|:---:|
-|![](https://github.com/CeuiLiSA/Pixiv-Shaft/blob/master/snap/QQ20200106-3.jpg)|![](https://github.com/CeuiLiSA/Pixiv-Shaft/blob/master/snap/QQ20200106-4.jpg)|![](https://github.com/CeuiLiSA/Pixiv-Shaft/blob/master/snap/ja/hotTag.jpg)
-
-## 4. Google Playからダウンロード
-
-<a href="https://play.google.com/store/apps/details?id=ceui.lisa.pixiv">
-    <img
-        alt="Get it on Google Play"
-        src="https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png"
-        width="330"
-        height="128"
-    />
+<a href="https://github.com/normalwindow/Pixiv-Shaft-Win">
+  <img src="../docs/svg/hero-en.svg" alt="PixShaft-Win — Pixiv を Windows デスクトップへ" width="100%">
 </a>
 
-## 5. Githubからダウンロード
+<br>
 
-[Releases](https://github.com/normalwindow/Pixiv-Shaft-Win/releases/latest)
+[![GitHub Release](https://img.shields.io/github/v/release/normalwindow/Pixiv-Shaft-Win?include_prereleases&style=for-the-badge&logo=windows&color=0078d4)](https://github.com/normalwindow/Pixiv-Shaft-Win/releases)
+[![GitHub Stars](https://img.shields.io/github/stars/normalwindow/Pixiv-Shaft-Win?style=for-the-badge&logo=github&color=f5c842)](https://github.com/normalwindow/Pixiv-Shaft-Win/stargazers)
+[![License](https://img.shields.io/github/license/normalwindow/Pixiv-Shaft-Win?style=for-the-badge&color=blue)](../LICENSE)
 
-上流の Android ビルドは [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft/releases/latest) にあります。
+<sub>Windows 10+ x64 · Kotlin + Compose Multiplatform · 無料 · オープンソース · 広告なし</sub>
 
-ソースからビルド:
+[English](README.en.md) | [简体中文](../README.md) | [日本語](README.ja.md)
 
-```bash
-./gradlew assembleGithubDebug
-./gradlew :shared:test :desktop:compileKotlin
-./gradlew :desktop:run
-./gradlew :desktop:packageReleaseDistributionForCurrentOS  # MSI + Exe + ポータブル zip（PixShaft 0.1.0）
-./gradlew :desktop:packageReleasePortableZip               # ポータブル zip のみ
+</div>
+
+> [!NOTE]
+> 非公式のサードパーティ [Pixiv](https://www.pixiv.net) クライアントです。[CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft)（`classic` ブランチ）のフォーク。作品の権利は各作者および Pixiv に帰属します。学習・交流目的のみ。
+
+## これは何
+
+**PixShaft-Win** は、有名なオープンソース Android Pixiv クライアント「Pixiv-Shaft」の **Windows デスクトップ版**です。上流の Android アプリは `classic` ブランチでそのまま維持され、本リポジトリは `desktop/` モジュールとして **Kotlin + Compose Multiplatform** 製のネイティブ Windows クライアントを追加しました。
+
+ログインはシステムの WebView2（Pixeval と同じ方式）。中国本土で**直接接続**可能です。
+
+## 上流（Android 版）との違い
+
+| | 上流 Android | 本デスクトップ |
+|---|---|---|
+| プラットフォーム | Android 7.0+ | Windows 10+ x64 |
+| 技術 | View + XML | Compose Multiplatform |
+| サイドバー | ボトムバー | ホバーで展開（コンテンツは動かない） |
+| 閲覧 | 単一ペイン | 瀑布流 / 左右ツーペイン |
+| ズーム | 固定列数 | **Ctrl+ホイールで無段階ズーム**（40%–300%） |
+| ページ状態 | 戻ると再読込 | データ + スクロール位置をキャッシュ |
+| ランキング | 19 種 + 日付 | 同じく 19 種 + カレンダー |
+| フォロー | すべて/公開/非公開 | イラスト·漫画 / 小説 × すべて/公開/非公開 |
+| 検索 | 完全なフィルタ | 履歴 + 発見 + フィルタ（永続化） |
+
+## インストール
+
+[GitHub Releases](https://github.com/normalwindow/Pixiv-Shaft-Win/releases) から `PixShaft-Win-x.y.z.msi/.exe` または `-portable.zip` をダウンロード。初回起動時に WebView2 でログインします。
+
+## ビルド
+
+```bat
+gradlew.bat :desktop:packageReleaseDistributionForCurrentOS
 ```
 
-Windows の MSI / Exe には WiX 3.11 が必要です。GitHub から落とせない場合は `WIX_PATH` を設定してください（[docs/upstream-sync.md](../docs/upstream-sync.md)）。成果物は `desktop/build/compose/binaries/main-release/{exe,msi,zip}/` です。ポータブル zip は `PixShaft.exe` と同じ場所に `PixShaft.portable` を置き、データは `%APPDATA%\PixShaft` ではなく `./data` に保存します。ログインは独立した Chrome/Edge ウィンドウ（Android Chrome UA + QUIC）です。DNS 汚染時、JavaFX 埋め込みページは白い画面のまま止まります。`refresh_token` の貼り付けもできます。
+JDK 17 が必要です。
 
-JDK 17+、Android SDK 36。Windows ネイティブクライアントは Compose Multiplatform の `:desktop` です。
+## スクリーンショット
 
-## 6. よくある問題とFAQ
+| | |
+|---|---|
+| ![home](../docs/screenshots/home.webp) | ![detail](../docs/screenshots/detail.webp) |
+| ![ranking](../docs/screenshots/ranking.webp) | ![search](../docs/screenshots/search.webp) |
 
-[FAQ](./FAQ.md)
+## License
 
-
-## 7. プロジェクトを支援する
-
-Shaft は無料のオープンソースで、余暇に開発・メンテナンスしています。役に立ったと感じたら、
-**Afdian（爱发电）** で開発を支援できます。
-
-### 💗 [afdian.com/a/pixshaft](https://afdian.com/a/pixshaft)
-
-支援は完全に任意です。Shaft のすべての機能は今後も無料のままです。
-スターを付ける、バグを報告する、プルリクエストを送る — どれも同じくらい助かります。
-
-### ライセンス
-
-Pixiv-Shaft-Win は Pixiv-Shaft のフォークで、[GNU General Public License, version 2](../LICENSE) の下で公開されています。上流: [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft)。
-
-Telegram Android の `SpoilerEffect2` レンダラーとシェーダーは公式 Telegram Android ソースを使用しています。詳細は[第三者通知](../THIRD_PARTY_NOTICES.md)を参照してください。
+[GPL-2.0](../LICENSE)（上流より継承）

@@ -152,6 +152,16 @@ interface AppApi {
         @Query("restrict") restrict: String = "public",
     ): UserPreviewResponse
 
+    /** 某位用户的好 P 友（互关好友）。 */
+    @GET("/v1/user/mypixiv?filter=for_android")
+    suspend fun userMyPixiv(
+        @Query("user_id") userId: Long,
+    ): UserPreviewResponse
+
+    /** 好 P 友（互关好友）的最新插画 / 漫画。 */
+    @GET("/v2/illust/mypixiv")
+    suspend fun myPixivWorks(): IllustResponse
+
     @GET("/v1/user/follower?filter=for_ios")
     suspend fun userFollowers(
         @Query("user_id") userId: Long,

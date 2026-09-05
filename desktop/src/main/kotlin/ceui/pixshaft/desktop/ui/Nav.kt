@@ -31,6 +31,7 @@ sealed class Dest {
     data object WatchLater : Dest()
     data object Pinned : Dest()
     data object Feature : Dest()
+    data object TrendingTags : Dest()
     data object Watchlist : Dest()
     data object NovelMarkers : Dest()
     data object Fans : Dest()
@@ -67,6 +68,7 @@ fun Dest.railTab(): RailTab = when (this) {
     Dest.Muted, Dest.EventHistory, Dest.About, Dest.Discovery, Dest.LocalNovels,
     Dest.Plaza, Dest.BulkDebug, Dest.SafTest, Dest.NetworkTest, Dest.WebHome -> RailTab.Me
     is Dest.Artwork, is Dest.Related -> RailTab.Home
+    Dest.TrendingTags -> RailTab.Home
 }
 
 fun Dest.supportsSplitBrowse(): Boolean = when (this) {
@@ -92,5 +94,6 @@ fun Dest.keepAliveKey(): String? = when (this) {
     Dest.Library -> "library"
     is Dest.Related -> "related:$id"
     is Dest.User -> "user:$id"
+    Dest.TrendingTags -> "trending"
     else -> null
 }

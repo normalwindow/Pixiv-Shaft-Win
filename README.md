@@ -1,326 +1,157 @@
 <div align="center">
 
-<a href="https://pixshaft.com" title="pixshaft.com — the Shaft website">
-  <img src="snap/pixshaft/hero-en.svg" alt="Shaft — the whole of Pixiv, in your pocket" width="100%">
+<a href="https://github.com/normalwindow/Pixiv-Shaft-Win" title="PixShaft-Win">
+  <img src="docs/svg/hero-zh.svg" alt="PixShaft — 把整个 Pixiv 搬上桌面" width="100%">
 </a>
 
 <br>
 
+[![GitHub Release](https://img.shields.io/github/v/release/normalwindow/Pixiv-Shaft-Win?include_prereleases&style=for-the-badge&logo=windows&color=0078d4)](https://github.com/normalwindow/Pixiv-Shaft-Win/releases)
 [![GitHub Stars](https://img.shields.io/github/stars/normalwindow/Pixiv-Shaft-Win?style=for-the-badge&logo=github&color=f5c842)](https://github.com/normalwindow/Pixiv-Shaft-Win/stargazers)
-[![GitHub Forks](https://img.shields.io/github/forks/normalwindow/Pixiv-Shaft-Win?style=for-the-badge&logo=github&color=8ac6d1)](https://github.com/normalwindow/Pixiv-Shaft-Win/network/members)
-[![GitHub Release](https://img.shields.io/github/v/release/normalwindow/Pixiv-Shaft-Win?style=for-the-badge&logo=windows&color=0078d4)](https://github.com/normalwindow/Pixiv-Shaft-Win/releases/latest)
 [![License](https://img.shields.io/github/license/normalwindow/Pixiv-Shaft-Win?style=for-the-badge&color=blue)](./LICENSE)
 
-[![Build Status](https://img.shields.io/github/actions/workflow/status/normalwindow/Pixiv-Shaft-Win/gradle.yml?branch=classic&style=flat-square&label=build)](https://github.com/normalwindow/Pixiv-Shaft-Win/actions)
-[![Issues](https://img.shields.io/github/issues/normalwindow/Pixiv-Shaft-Win?style=flat-square&color=brightgreen)](https://github.com/normalwindow/Pixiv-Shaft-Win/issues)
-[![Issues Closed](https://img.shields.io/github/issues-closed/normalwindow/Pixiv-Shaft-Win?style=flat-square&color=9466ff)](https://github.com/normalwindow/Pixiv-Shaft-Win/issues?q=is%3Aissue+is%3Aclosed)
-[![Last Commit](https://img.shields.io/github/last-commit/normalwindow/Pixiv-Shaft-Win?style=flat-square)](https://github.com/normalwindow/Pixiv-Shaft-Win/commits)
-[![Code Size](https://img.shields.io/github/languages/code-size/normalwindow/Pixiv-Shaft-Win?style=flat-square)](https://github.com/normalwindow/Pixiv-Shaft-Win)
-[![Top Language](https://img.shields.io/github/languages/top/normalwindow/Pixiv-Shaft-Win?style=flat-square&color=7f52ff)](https://github.com/normalwindow/Pixiv-Shaft-Win)
-[![Contributors](https://img.shields.io/github/contributors/normalwindow/Pixiv-Shaft-Win?style=flat-square&color=orange)](https://github.com/normalwindow/Pixiv-Shaft-Win/graphs/contributors)
-[![Downloads](https://img.shields.io/github/downloads/normalwindow/Pixiv-Shaft-Win/total?style=flat-square&color=e74c3c)](https://github.com/normalwindow/Pixiv-Shaft-Win/releases)
+<sub>Windows 10+ x64 · Kotlin + Compose Multiplatform 原生桌面客户端 · 免费开源 · 无广告</sub>
 
-**PixShaft-Win** is a fork of [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft) on the `classic` branch: the same open-source Pixiv client for Android, plus a widescreen UI for tablets / PCs and a native Windows (x64 / ARM64) client on the roadmap.
-
-[<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" width="200">](https://play.google.com/store/apps/details?id=ceui.pixiv.pshaft)
-&nbsp;&nbsp;
-[<img src="https://img.shields.io/badge/GitHub-Releases-181717?style=for-the-badge&logo=github" alt="GitHub Releases">](https://github.com/normalwindow/Pixiv-Shaft-Win/releases/latest)
-&nbsp;&nbsp;
-[<img src="https://img.shields.io/badge/🌐_Website-pixshaft.com-7c5cff?style=for-the-badge" alt="Website">](https://pixshaft.com)
-&nbsp;&nbsp;
-[<img src="https://img.shields.io/badge/💗_Sponsor-爱发电-946ce6?style=for-the-badge" alt="Sponsor on Afdian">](https://afdian.com/a/pixshaft)
-
-<sub>Android 7.0+ · Windows x64 / ARM64 (native client in progress) · direct connection in mainland China · free, open source, no ads</sub>
-
----
-
-**English** | [简体中文](./README/README.zh-CN.md) | [日本語](./README/README.ja.md)
+**简体中文** | [English](#english) · Android 版请回到上游 [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft)
 
 </div>
 
 > [!NOTE]
-> This is an unofficial third-party client for [Pixiv](https://www.pixiv.net), forked from [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft) (`classic` only). All illustrations, manga, and novel works are copyrighted by their respective creators or Pixiv. This project is open-source for learning and communication purposes only. See [docs/upstream-sync.md](./docs/upstream-sync.md) for how this fork stays mergeable with upstream.
-
-<br>
-
-<div align="center">
-  <img src="snap/pixshaft/capabilities-en.svg" alt="Built for browsing Pixiv — illustrations, manga, novels, rankings, PixiVision, FANBOX, pixiv COMIC, trending tags, following feed, ugoira interpolation, GIF/MP4, batch download, resumable downloads, reverse image search, watch later, local library, network self-check, image mirrors, tablet two-pane, multi-account, custom accent color, dark mode, Material You" width="100%">
-</div>
-
-## ✨ Features
-
-### A Pixiv client that can actually keep up
-From browsing and discovery to downloads and bookmarks, from FANBOX to pixiv COMIC — everything you'd want to do on Pixiv, done properly.
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-#### 🎯 A feed made for you
-Personalised illustration, manga and novel recommendations, trending tags refreshed in real time — every pull-to-refresh is a new surprise.
-
-#### 🏆 Rankings & chart hub
-Daily / weekly / monthly rankings with a date picker to revisit any day; the Discover tab adds bookmark charts, AI charts, charts by era, wallpaper charts, tag zones and artist charts.
-
-#### 🔍 Powerful search & filters
-Six sort orders, upload period, bookmark-count range, aspect ratio and resolution, a three-way AI switch — and sorting by popularity **without** Pixiv Premium.
-
-#### 🖼️ Reverse image search
-SauceNAO / TinEye / IQDB / Ascii2D, one tap to find the source.
-
-#### 🎁 FANBOX & pixiv COMIC
-Native FANBOX: post feed, recommended creators, full post bodies and plans — no more hand-off to the browser; the pixiv COMIC home lives in the app too. One account, everything connected.
-
-#### 📖 Novel reader · local library
-Series, chapters, bookmarks and a progress percentage, with related illustrations mixed in automatically; point it at a folder to read local txt files, and bookmarking saves the whole novel as TXT.
-
-</td>
-<td width="50%" valign="top">
-
-#### 👥 Fast multi-account switching
-Follows, DMs, bookmarks — hop freely between accounts.
-
-#### ⬇️ Batch download · resumable
-Queue a whole set at once and pick up from where a flaky network dropped it; batch-rename with naming templates, export captions alongside, or hand the jobs to aria2 on your NAS.
-
-#### 🙈 Mute settings
-Manage by tag and by artist separately, or mute a single work in place — cards get blurred and one tap reveals them.
-
-#### 🔖 Watch later
-Long-press a card to stash it. Purely local, never reported — collect a batch and browse at leisure.
-
-#### 📡 Network self-check · painless direct connection
-Built-in network test page: DNS, App API, web endpoints and a real image download are checked one by one, and IPv6 pollution gets called out on the spot. Slow? Switch images to pixiv.cat / pixiv.re / pixiv.nl or your own reverse proxy, or use your own App API proxy.
-
-#### ⚡ Instant cold start · local first
-Home recommendations, rankings and latest works open instantly from the last snapshot while the network refreshes quietly in the background; bookmarks and follows go into a persistent queue so a tap while offline is never lost.
-
-#### 🖥️ Widescreen · keyboard
-On tablets and PCs (`sw ≥ 840dp`) the bottom bar becomes a navigation rail, waterfall columns can auto-fit the pane (2–8), and an external keyboard gets J/K, F, Ctrl+S, Ctrl+F, Esc and 1–5. Existing phone users keep their current column count and two-pane switch.
-
-</td>
-</tr>
-</table>
-
-## 📱 Interface
-
-### Every screen, polished
-Real-device captures — what you see here is exactly what you get when you open the app.
-
-<table>
-<tr>
-<td align="center" width="33%"><img src="snap/pixshaft/frames/home.webp" width="300" alt="Home — recommendations and rankings in one screen"><br><b>Home</b><br><sub>Recommendations & rankings, one screen away</sub><br><sub>Personalised feed · Rankings carousel · One-tap bookmark</sub></td>
-<td align="center" width="33%"><img src="snap/pixshaft/frames/detail.webp" width="300" alt="Artwork detail — high-resolution viewing"><br><b>Viewer</b><br><sub>High-res viewing, every detail</sub><br><sub>Multi-page fold · Download / bookmark / comment capsule · Load original · Reverse search</sub></td>
-<td align="center" width="33%"><img src="snap/pixshaft/frames/filters.webp" width="300" alt="Search filters"><br><b>Search</b><br><sub>Exactly what you're looking for</sub><br><sub>Six sort orders · Bookmark-count range · AI three-way · Safe only</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="snap/pixshaft/frames/profile.webp" width="300" alt="Artist profile"><br><b>Artist</b><br><sub>Step into the artist's world</sub><br><sub>Advanced tag search · Works / bookmarks nav · Add to home screen</sub></td>
-<td align="center"><img src="snap/pixshaft/frames/gallery.webp" width="300" alt="Artist works wall"><br><b>Works wall</b><br><sub>Illustrations, manga and novels, tab by tab</sub><br><sub>Waterfall gallery · Bookmark from the card · Manga series</sub></td>
-<td align="center"><img src="snap/pixshaft/frames/discover.webp" width="300" alt="Discover — features, columns and chart hub"><br><b>Discover</b><br><sub>Features, columns & chart hub</sub><br><sub>Manga / novel columns · PixiVision · Trending tags · Chart hub</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="snap/pixshaft/frames/tags.webp" width="300" alt="Trending tags"><br><b>Trending tags</b><br><sub>Live trends, with cover previews</sub><br><sub>Real-time tags · Cover preview · One tap in</sub></td>
-<td align="center"><img src="snap/pixshaft/frames/download.webp" width="300" alt="Download queue"><br><b>Downloads</b><br><sub>Batch download · queue management</sub><br><sub>Batch queue · Resumable · Caption export · Batch rename · aria2 remote</sub></td>
-<td align="center"><img src="snap/pixshaft/frames/manga.webp" width="300" alt="Manga series"><br><b>Manga</b><br><sub>Serialised manga, chapter by chapter</sub><br><sub>Follow series · Read whole chapters · Batch download / bookmark</sub></td>
-</tr>
-<tr>
-<td align="center"><img src="snap/pixshaft/frames/manga-read.webp" width="300" alt="Manga reader"><br><b>Manga reader</b><br><sub>Turns like paper, immersive</sub><br><sub>Two-way paging · Bookmarks · Translate the whole series · Night mode</sub></td>
-<td align="center"><img src="snap/pixshaft/frames/novel.webp" width="300" alt="Novel reader"><br><b>Novel reader</b><br><sub>Immersive reading</sub><br><sub>Progress percentage · Auto-mixed illustrations · Local txt library</sub></td>
-<td></td>
-</tr>
-</table>
-
-<details>
-<summary><b>More about each screen</b></summary>
-<br>
-
-- **Home** — rankings preview in a horizontal strip, a personalised waterfall feed, bookmark straight from the card, long-press for the action menu. On a tablet in landscape you can turn on two-pane: list on the left, detail on the right.
-- **Viewer** — ZoomImage engine for silky zooming, three double-tap behaviours to choose from, force-load the original at any time. Multi-page works fold into one and expand with a tap or open in the reader; download, bookmark and comments sit in a floating capsule, with reverse image search and AI upscaling on the same screen.
-- **Search** — switch between six sort orders with one tap: popularity preview, newest, oldest, popular, popular (male), popular (female). Stack on search scope, type, upload period, bookmark-count range, aspect ratio and resolution, plus a three-way AI switch (any / hide / only) — sorting by popularity needs no Pixiv Premium.
-- **Artist** — follow artists you like and see their illustrations, manga, novels, manga series and bookmarks at a glance; the advanced tag search panel digs through all of that artist's tags, and the profile can be pinned to your home screen.
-- **Discover** — manga and novel columns on top, then official PixiVision features, live trending tags and newest uploads; further down, bookmark charts, AI charts, charts by era, wallpaper charts, tag zones and artist charts — good work always surfaces.
-- **Trending tags** — Original, VTuber, Genshin, Wuthering Waves, Blue Archive… trending tags refreshed in real time with cover previews.
-- **Downloads** — queue a whole set, with downloading / waiting / done sections; resume from where the connection dropped, batch-rename with naming templates, export captions alongside, or send jobs straight to aria2 on your NAS.
-- **Manga** — series shown chapter by chapter; follow the author to never miss an update. Open to read, batch download a whole set, and bookmark / un-bookmark while multi-selecting.
-- **Manga reader** — previous / next chapter flow, paging direction, progress bar, table of contents, bookmarks and night mode; "translate the whole series" keeps running in the background after you leave the viewer.
-- **Novel reader** — series, contents, night mode, font size / line spacing / background to taste, an always-on progress percentage at the bottom, and related illustrations mixed in automatically. Pick a folder to read local txt; bookmarking saves the whole TXT.
-
-</details>
-
-## 🤖 AI
-
-### AI on board, one level up
-Generative AI in your pocket — sharper images, manga you can read, characters cut out in a tap, smoother ugoira.
-
-<table>
-<tr>
-<td width="50%" valign="top">
-
-#### 🔍 Super-resolution upscaling
-AI super-resolution enlarges low-res illustrations 2–4×, rebuilding hair strands and line detail so thumbnails and old images come back in HD.
-- 2× / 4× smart upscaling
-- Line-art sharpening · denoise
-- On-device inference · nothing uploaded
-
-#### ✂️ Smart cut-out
-Separate character from background in one tap, with edges clean down to single hairs, and export a transparent PNG — avatars, stickers and fan-art material ready to go.
-- Hair-level edges
-- Transparent PNG export
-- Batch processing
-
-</td>
-<td width="50%" valign="top">
-
-#### 💬 Manga translation (OCR + MT)
-Detects speech bubbles automatically, translates in place and re-typesets; "translate the whole series" finishes multiple pages in one go and keeps running after you leave the viewer. Besides the built-in engine you can plug in your own OpenAI-compatible endpoint.
-- Automatic bubble detection
-- Translate whole series · runs in background
-- Custom AI endpoint · streaming
-
-#### 🎞️ Ugoira frame interpolation (RIFE)
-RIFE interpolation adaptively brings ugoira up to 2× / 4×, close to the 50 fps ceiling; playback uses a frame-sequence player so motion no longer depends on the device.
-- Adaptive 2× / 4×
-- Save as H.264 MP4
-- A fraction of the size of a GIF
-
-</td>
-</tr>
-</table>
-
-<sub>AI features keep evolving — more coming.</sub>
-
-## 🛠️ Under the hood
-
-<div align="center">
-  <img src="snap/pixshaft/tech-en.svg" alt="Tech stack — Kotlin, Material Design 3, MVVM, Retrofit 2, Room, Glide, in-house Feeds framework, witstudio, actionqueue, Cronet, Activity Embedding, Target SDK 36" width="100%">
-</div>
-
-A modern Android stack, Kotlin-first, with a clear architecture and an eye on performance and battery. See the module docs for the in-house pieces: [feeds](./docs/feeds-module.md) · [actionqueue](./docs/action-queue.md) · [direct connect](./docs/direct-connect.md) · [image host](./docs/image-host.md).
-
-### Building from source
-
-```bash
-git clone https://github.com/normalwindow/Pixiv-Shaft-Win.git
-cd Pixiv-Shaft-Win
-git checkout classic
-
-./gradlew assembleGithubDebug      # debug APK (this fork)
-./gradlew assembleGithubRelease    # release APK (needs a signing config)
-
-./gradlew :shared:test :desktop:compileKotlin   # JVM client
-./gradlew :desktop:run                          # Compose Desktop window
-./gradlew :desktop:packageReleaseDistributionForCurrentOS  # MSI + Exe + portable zip (PixShaft 0.1.0)
-./gradlew :desktop:packageReleasePortableZip               # portable zip only (needs the app-image)
-```
-
-Windows packaging needs WiX 3.11 (`light.exe` / `candle.exe`). If Gradle cannot download it from GitHub, set `WIX_PATH` — see [docs/upstream-sync.md](./docs/upstream-sync.md). Outputs land in `desktop/build/compose/binaries/main-release/{exe,msi,zip}/`. The portable zip includes `PixShaft.portable` next to `PixShaft.exe` so data stays in `./data` instead of `%APPDATA%\PixShaft`. Login launches an isolated Chrome/Edge window with an Android Chrome UA and QUIC (JavaFX WebView cannot reach Pixiv on poisoned DNS). You can also paste a `refresh_token`.
-
-Merge upstream with `pwsh -File scripts/sync-upstream.ps1` — conflict hotspots are listed in [docs/upstream-sync.md](./docs/upstream-sync.md). After a README merge, restore this fork's copy from `docs/readme-win/`.
-
-**Requirements:** JDK 17+, Android SDK 36 · Min SDK 24 (Android 7.0), Target SDK 36 (Android 16) · Windows native client (`:desktop`, Compose Multiplatform) packages as MSI + Exe + portable zip.
-
-## 💎 Plans
-
-Shaft itself is free, open source and ad-free forever, with every feature unlocked — including AI upscaling, cut-out, manga translation and ugoira interpolation. The one thing with a quota is **"sort any keyword by popularity"**, because it uses shared search resources. Subscribing only multiplies that quota; it never unlocks exclusive features.
-
-| | Free | Pro | Max |
-|---|---|---|---|
-| Popularity-sort quota | 1× | 5× | 20× |
-| All illustration / manga / novel / ranking features | ✅ | ✅ | ✅ |
-| AI upscaling, cut-out, translation, interpolation | ✅ | ✅ | ✅ |
-| Sort any keyword by popularity | basic quota, then falls back to popularity preview | ✅ | ✅ |
-| Auto-renew | — | no, falls back to Free on expiry | no, falls back to Free on expiry |
-
-Already a pixiv Premium member? Popularity sort goes straight through the official API — unlimited, no subscription needed. The in-app **Usage** page shows remaining quota and lets you order directly; orders placed on Afdian can be claimed with "Restore purchase". Prices and details: [pixshaft.com](https://pixshaft.com/#pricing) · [afdian.com/a/pixshaft](https://afdian.com/a/pixshaft).
-
-## ❓ FAQ
-
-<details><summary><b>Are PixShaft and Shaft the same app?</b></summary><br>Yes. PixShaft is the public name on Google Play and at pixshaft.com; the project codename is Shaft (repository <code>Pixiv-Shaft</code>). Same open-source code, same team — look for pixshaft.com.</details>
-<details><summary><b>Is PixShaft an official app?</b></summary><br>No. PixShaft (Shaft) is an unofficial third-party Pixiv client, open-sourced for learning and communication only. All illustrations, manga and novels are copyrighted by their creators or Pixiv.</details>
-<details><summary><b>Do I have to pay, or have Premium?</b></summary><br>The app is completely free, open source and ad-free, with nothing locked — including AI upscaling, cut-out, manga translation and ugoira interpolation. The only quota is on "sort any keyword by popularity" (it uses shared search resources): free users get a base quota and fall back to popularity preview when it runs out, or you can turn off default popularity sorting in Settings and keep the quota for when you need it. For more quota, subscribe to Pro (5×) or Max (20×); pixiv Premium members go straight through the official API with no limit and no subscription.</details>
-<details><summary><b>Does direct connection work in mainland China?</b></summary><br>Yes. Shaft ships with a direct-connection scheme, so mainland users can browse without an extra proxy. If it won't connect, open the built-in network test page — DNS, App API, web endpoints and a real image download are checked one by one and IPv6 pollution is called out; slow images can be switched to pixiv.cat / pixiv.re / pixiv.nl or your own reverse proxy, and you can also fill in your own App API proxy.</details>
-<details><summary><b>If a download breaks halfway, is it wasted?</b></summary><br>No. Downloads are resumable — retries and cold starts continue from the last progress. There's also batch rename, naming-template organisation, automatic caption export, "low-key download" (downloaded images don't crowd the front of your gallery or WeChat / QQ pickers), and remote download to aria2 on your NAS.</details>
-<details><summary><b>Tablet / PC / Windows?</b></summary><br>Yes. Wide windows (<code>sw ≥ 840dp</code>) switch the home chrome to a navigation rail, columns can auto-fit the pane, and a keyboard cheat-sheet lives in Settings → Appearance. Two-pane (list + detail) is still the existing tablet switch — first launch on a large screen turns it on; existing users are left alone. A native Windows x64 / ARM64 <code>.exe</code> is planned; this is not WSA wrapping the APK.</details>
-<details><summary><b>Which Android versions?</b></summary><br>Android 7.0 and up (Min SDK 24), targeting Android 16 (Target SDK 36).</details>
-<details><summary><b>Where do I download it?</b></summary><br>This fork: <a href="https://github.com/normalwindow/Pixiv-Shaft-Win/releases/latest">GitHub Releases</a>. Upstream Android builds remain on <a href="https://play.google.com/store/apps/details?id=ceui.pixiv.pshaft">Google Play</a> and <a href="https://github.com/CeuiLiSA/Pixiv-Shaft/releases/latest">CeuiLiSA/Pixiv-Shaft</a>.</details>
-
-More in the [FAQ](./FAQ.md) · [install FAQ](./FAQ-install.md) · [download path & filename guide](./DOWNLOAD.md).
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to open issues or submit pull requests.
-
-### 🏆 Top Contributors
-
-<table>
-  <tr>
-    <td align="center"><a href="https://github.com/CeuiLiSA"><img src="https://avatars.githubusercontent.com/u/32817377?v=4" width="72" height="72" style="border-radius:50%" alt="CeuiLiSA"/><br/><sub><b>🥇 CeuiLiSA</b></sub></a><br/><sub>521 commits</sub><br/><sub>+143,913 / −85,914</sub></td>
-    <td align="center"><a href="https://github.com/sunbeams001"><img src="https://avatars.githubusercontent.com/u/3478170?v=4" width="72" height="72" style="border-radius:50%" alt="sunbeams001"/><br/><sub><b>🥈 sunbeams001</b></sub></a><br/><sub>504 commits</sub><br/><sub>+21,001 / −9,963</sub></td>
-    <td align="center"><a href="https://github.com/SoxiaLiSA"><img src="https://avatars.githubusercontent.com/u/162939383?v=4" width="72" height="72" style="border-radius:50%" alt="SoxiaLiSA"/><br/><sub><b>🥉 SoxiaLiSA</b></sub></a><br/><sub>332 commits</sub><br/><sub>+52,639 / −15,211</sub></td>
-    <td align="center"><a href="https://github.com/4ragaki"><img src="https://avatars.githubusercontent.com/u/23445216?v=4" width="72" height="72" style="border-radius:50%" alt="4ragaki"/><br/><sub><b>4ragaki</b></sub></a><br/><sub>41 commits</sub><br/><sub>+1,231 / −201</sub></td>
-    <td align="center"><a href="https://github.com/duzhaokun123"><img src="https://avatars.githubusercontent.com/u/39830683?v=4" width="72" height="72" style="border-radius:50%" alt="duzhaokun123"/><br/><sub><b>duzhaokun123</b></sub></a><br/><sub>37 commits</sub><br/><sub>+1,174 / −717</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><a href="https://github.com/0-a-e"><img src="https://avatars.githubusercontent.com/u/42256381?v=4" width="72" height="72" style="border-radius:50%" alt="0-a-e"/><br/><sub><b>0-a-e</b></sub></a><br/><sub>19 commits</sub><br/><sub>+907 / −839</sub></td>
-    <td align="center"><a href="https://github.com/Lostin-Tianyi"><img src="https://avatars.githubusercontent.com/u/158666756?v=4" width="72" height="72" style="border-radius:50%" alt="Lostin-Tianyi"/><br/><sub><b>Lostin-Tianyi</b></sub></a><br/><sub>17 commits</sub><br/><sub>+1,080 / −149</sub></td>
-    <td align="center"><a href="https://github.com/SodaWithoutSparkles"><img src="https://avatars.githubusercontent.com/u/64138578?v=4" width="72" height="72" style="border-radius:50%" alt="SodaWithoutSparkles"/><br/><sub><b>SodaWithoutSparkles</b></sub></a><br/><sub>16 commits</sub><br/><sub>+351 / −273</sub></td>
-    <td align="center"><a href="https://github.com/LoxiaLiSA"><img src="https://avatars.githubusercontent.com/u/81730053?v=4" width="72" height="72" style="border-radius:50%" alt="LoxiaLiSA"/><br/><sub><b>LoxiaLiSA</b></sub></a><br/><sub>14 commits</sub><br/><sub>+50,536 / −15,637</sub></td>
-    <td align="center"><a href="https://github.com/yxsra"><img src="https://avatars.githubusercontent.com/u/49748345?v=4" width="72" height="72" style="border-radius:50%" alt="yxsra"/><br/><sub><b>yxsra</b></sub></a><br/><sub>11 commits</sub><br/><sub>+182 / −53</sub></td>
-  </tr>
-</table>
-
-<sub>Commits from the GitHub contributors API; lines added / removed from <code>git log --numstat</code>. Snapshot taken 2026-04-21 — see the [live list](https://github.com/CeuiLiSA/Pixiv-Shaft/graphs/contributors).</sub>
-
-### All contributors
-
-<a href="https://github.com/CeuiLiSA/Pixiv-Shaft/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=CeuiLiSA/Pixiv-Shaft" alt="Contributors" />
-</a>
-
-<br>
-
-[![Star History Chart](https://star-history.dera.page/svg?repos=CeuiLiSA/Pixiv-Shaft&type=Date)](https://star-history.dera.page/#CeuiLiSA/Pixiv-Shaft&type=Date)
-
-## 💗 Support the Project
-
-Shaft is free and open-source, built and maintained in spare time. If it has been
-useful to you, you can support continued development on **Afdian (爱发电)**:
-
-<div align="center">
-
-### 💗 [afdian.com/a/pixshaft](https://afdian.com/a/pixshaft)
-
-[<img src="https://img.shields.io/badge/爱发电-支持_Shaft-946ce6?style=for-the-badge" alt="Support Shaft on Afdian">](https://afdian.com/a/pixshaft)
-
-</div>
-
-Sponsorship is entirely optional — every feature of Shaft is, and will stay, free for
-everyone. Starring the repo, reporting bugs, and sending pull requests help just as much.
-
-## 📄 License
-
-Pixiv-Shaft-Win is a fork of Pixiv-Shaft, licensed under the [GNU General Public License, version 2](./LICENSE). Upstream: [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft).
-
-The Telegram Android `SpoilerEffect2` renderer and shaders are derived from the official Telegram Android source; see [third-party notices](./THIRD_PARTY_NOTICES.md).
+> 这是一个非官方的第三方 [Pixiv](https://www.pixiv.net) 客户端，fork 自 [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft) 的 `classic` 分支。所有插画、漫画、小说作品版权归各自创作者与 Pixiv 所有；本项目开源仅供学习交流使用。
 
 ---
 
+## 这是什么
+
+**PixShaft-Win** 是 Pixiv-Shaft（安卓端知名第三方 Pixiv 客户端）的 **Windows 桌面分支**：
+上游的安卓 App 保持原样继续跟随上游更新，本仓库在 `classic` 分支上另起一条
+`desktop/` 模块，用 **Kotlin + Compose Multiplatform** 写了一个原生的 Windows 客户端——
+不是网页套壳，也不是 Electron，就是一个普通的 Win32 进程 + GPU 渲染的 Compose 界面。
+
+登录走系统 WebView2（与 Pixeval 相同的方案），网络默认**中国大陆可直连**
+（Chromium QUIC + 无 SNI 图片通道），无需代理。
+
+## 与上游（安卓版）的差异
+
+| | 上游安卓 App | 本仓库桌面端 |
+|---|---|---|
+| 平台 | Android 7.0+ | Windows 10+ x64 |
+| 技术栈 | View + XML（classic 分支） | Compose Multiplatform 桌面 |
+| 侧栏 | 底部栏 / 平板侧栏 | 可隐藏悬停展开侧栏（60dp 窄条 → 196dp 浮层，不推挤内容） |
+| 浏览 | 单列跳转 | 瀑布流跳转 / 左右分栏（中缝一键左右互换） |
+| 缩放 | 固定列数 | **Ctrl+滚轮 / 双指捏合无极缩放**（40%–300%，带百分比标尺与一键复位） |
+| 页面连贯性 | 返回重载 | 页面数据 + 滚动位置缓存，进出详情页、切换页签不刷新 |
+| 排行 | 19 种榜单 + 日期 | 同样 19 种榜单 + 日期选择器（与上游对齐） |
+| 关注 | 全部/公开/私人 | 插画·漫画 / 小说 × 全部/公开/私人 |
+| 搜索 | 完整筛选 | 历史 + 发现 + 排序/匹配/收藏数/R-18 筛选（持久化） |
+| 图片预览 | 应用内查看器 | 全窗口预览：滚轮缩放、拖动平移、多页翻页、Esc 关闭 |
+| 下载管理 | Service + 通知 | 队列页：暂停/继续、单任务重试/移除、失败批量重试、打开文件夹 |
+| 快捷键 | 少量 | `Ctrl+F` 搜索、`Esc` 返回、`1–5` 切换页签、方向键翻页预览 |
+
+上游安卓 App 的功能与截图见 [上游 README](https://github.com/CeuiLiSA/Pixiv-Shaft#readme)。
+
+## 桌面端功能
+
+- **首页**：推荐（插画/漫画）+ 实时热门标签条 + 一键刷新
+- **排行**：日/周/月/AI/男性/女性/原创/新人/R-18 系列/R-18G/漫画系列，共 19 种榜单，可选日期回看历史榜单
+- **关注**：插画·漫画与小说双流，全部/公开/私人三档
+- **搜索**：搜索历史（本地保存、可清空）+ 搜索发现（热门标签、排行速览），结果页内置排序 / 匹配方式 / 收藏数下限 / R-18 四组筛选
+- **作品详情**：多 P 页签（页码胶囊 + 缩略图条）、动图自动播放、漫画阅读器、相关作品一键进瀑布流、收藏/下载/关注全联动（自动关注、自动下载、私密收藏等设置全部生效）
+- **用户页**：插画 / 漫画 / 关注（收藏）三页签 + 关注按钮
+- **下载**：文件名模板、按作者/R18/AI 分目录、覆盖策略、并发数、本地队列管理
+- **其它**：多账号、以图搜图、网络自检、FANBOX、pixiv COMIC、本地小说、本地书库、深色模式、5 种强调色
+
+## 下载安装
+
+到 [GitHub Releases](https://github.com/normalwindow/Pixiv-Shaft-Win/releases) 下载：
+
+| 文件 | 说明 |
+|---|---|
+| `PixShaft-x.y.z.msi` | Windows 安装包（推荐），带开始菜单与卸载项 |
+| `PixShaft-x.y.z.exe` | 同上的 EXE 安装包 |
+| `PixShaft-x.y.z-portable.zip` | 便携版，解压即用，数据与程序同目录 |
+
+首次启动后在登录页用 **WebView2 登录**（需要系统装有 WebView2 Runtime，Win11 自带）。
+
+## 从源码构建
+
+```bat
+git clone https://github.com/normalwindow/Pixiv-Shaft-Win.git
+cd Pixiv-Shaft-Win
+set JAVA_HOME=C:\path\to\jdk-17
+gradlew.bat :desktop:packageReleaseDistributionForCurrentOS
+```
+
+- 需要 **JDK 17**；`gradle.properties` 里保留了上游作者的 macOS 工具链路径，
+  在其它机器上构建请通过 `JAVA_HOME` 指向本地 JDK 17，或用
+  `-Dorg.gradle.java.installations.paths=` 覆盖。
+- 产物在 `desktop/build/compose/binaries/main-release/` 下（`msi/`、`exe/`、`zip/`、`app/`）。
+- 只想跑起来看效果：`gradlew.bat :desktop:run`。
+
+## 键盘快捷键
+
+| 按键 | 作用 |
+|---|---|
+| `Ctrl+F` / `4` | 打开搜索 |
+| `1` / `2` / `3` / `5` | 首页 / 排行 / 关注 / 我的 |
+| `Esc` | 关闭预览 / 搜索 / 抽屉 / 分栏详情，否则返回上一页 |
+| `←` / `→` | 图片预览中翻页 |
+| `Ctrl+滚轮` | 瀑布流无极缩放 |
+
+## 截图
+
+| | |
+|---|---|
+| ![首页](docs/screenshots/home.webp) | ![作品详情](docs/screenshots/detail.webp) |
+| ![排行](docs/screenshots/ranking.webp) | ![搜索](docs/screenshots/search.webp) |
+| ![用户页](docs/screenshots/user.webp) | ![下载管理](docs/screenshots/download.webp) |
+
+## 目录结构
+
+```
+app/            上游安卓 App（保持上游原样，跟随 classic 分支）
+shared/         双端共享：Pixiv App-API 客户端、模型、OAuth
+desktop/        Windows 桌面端（本项目主要开发处）
+  ui/           Compose 界面：导航、瀑布流、详情、预览、设置…
+  net/          网络诊断
+  webview-auth/ WebView2 登录辅助进程（.NET 8）
+docs/           协议与架构笔记（含聊天 WS 协议、feeds 模块等，来自上游）
+```
+
+## 与上游同步
+
+本仓库 `classic` 分支直接跟踪上游 `classic`；上游提交会定期合并进来，
+`shared/` 与 `app/` 尽量不做破坏性改动以保证可合并性。桌面端代码全部位于
+`desktop/` 与 `shared/` 的少量增量里。
+
+## 免责声明
+
+本项目与 Pixiv 官方无关。请遵守 Pixiv 服务条款，尊重创作者版权，
+下载功能仅用于个人离线欣赏。
+
+## License
+
+[GPL-2.0](./LICENSE)（继承上游）
+
+## 致谢
+
+- [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft) —— 一切的基础
+- [Pixeval](https://github.com/Pixeval/Pixeval) —— WebView2 登录方案的参考
+- [JetBrains Compose Multiplatform](https://github.com/JetBrains/compose-multiplatform)、[Coil](https://github.com/coil-kt/coil)、[OkHttp](https://github.com/square/okhttp)、[Retrofit](https://github.com/square/retrofit)
+
+---
+
+<a id="english"></a>
+
 <div align="center">
 
-<a href="https://github.com/normalwindow/Pixiv-Shaft-Win/releases/latest">
-  <img src="snap/pixshaft/cta-en.svg" alt="Start browsing Pixiv now — GitHub Releases" width="100%">
+<a href="https://github.com/normalwindow/Pixiv-Shaft-Win">
+  <img src="docs/svg/hero-en.svg" alt="PixShaft — The whole of Pixiv, on your desktop" width="100%">
 </a>
 
-<br><br>
-
-**If you find Shaft useful, consider giving it a star!**
-
-[![Star this repo](https://img.shields.io/badge/-Star%20this%20repo-f5c842?style=for-the-badge&logo=github&logoColor=black)](https://github.com/normalwindow/Pixiv-Shaft-Win)
-&nbsp;
-[![Sponsor on Afdian](https://img.shields.io/badge/-Sponsor%20on%20爱发电-946ce6?style=for-the-badge)](https://afdian.com/a/pixshaft)
-
-<sub>The README assets (hero, chips, framed screenshots) are generated by <a href="./scripts/build_readme_assets.py"><code>scripts/build_readme_assets.py</code></a> from the real-device screenshots in <code>snap/pixshaft/screens</code>.</sub>
-
-Made with love for the Pixiv community
+**PixShaft-Win** — a native Windows client for Pixiv, grown out of the
+Android app [CeuiLiSA/Pixiv-Shaft](https://github.com/CeuiLiSA/Pixiv-Shaft).
+Kotlin + Compose Multiplatform, direct connection in mainland China,
+free & open source. See the Chinese section above for the full feature list.
 
 </div>

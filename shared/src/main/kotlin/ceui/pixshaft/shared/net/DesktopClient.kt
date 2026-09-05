@@ -72,6 +72,13 @@ class DesktopClient(
         .build()
         .create(ShaftChatApi::class.java)
 
+    val plazaApi: PlazaApi = Retrofit.Builder()
+        .baseUrl(CHAT_BASE)
+        .client(http.newBuilder().readTimeout(20, TimeUnit.SECONDS).build())
+        .addConverterFactory(GsonConverterFactory.create(gson))
+        .build()
+        .create(PlazaApi::class.java)
+
     companion object {
         const val CHAT_BASE = "http://36.138.103.18:30009/"
 

@@ -37,6 +37,8 @@ object AppPaths {
     val accountsFile: Path get() = root.resolve("accounts.json")
     val queueFile: Path get() = root.resolve("download-queue.json")
     val searchHistoryFile: Path get() = root.resolve("search-history.json")
+    val featureFile: Path get() = root.resolve("feature-list.json")
+    val batchFile: Path get() = root.resolve("batch-list.json")
 
     fun defaultCache(): Path = root.resolve("cache")
 

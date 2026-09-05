@@ -38,7 +38,7 @@ compose.desktop {
                     org.jetbrains.compose.desktop.application.dsl.TargetFormat.Msi,
                     org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
             )
-            packageName = 'PixShaft'
+            packageName = 'PixShaft-Win'
             packageVersion = '0.0.2'
             description = 'Unofficial Pixiv client for Windows (Pixiv-Shaft-Win)'
             vendor = 'Pixiv-Shaft-Win'
@@ -64,7 +64,7 @@ tasks.register('packageReleasePortableZip', Zip) {
     dependsOn tasks.named('createReleaseDistributable')
     group = 'compose desktop'
     description = 'Zip the release app-image with a PixShaft.portable marker.'
-    archiveFileName = 'PixShaft-0.0.2-portable.zip'
+    archiveFileName = 'PixShaft-Win-0.0.2-portable.zip'
     destinationDirectory = layout.buildDirectory.dir('compose/binaries/main-release/zip')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.dir('compose/binaries/main-release/app/PixShaft')) {

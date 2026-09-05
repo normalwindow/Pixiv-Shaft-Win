@@ -53,12 +53,12 @@
 <text x="912.5" y="156" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">OkHttp · SSE streaming</text>
 <rect x="40.0" y="194" width="269.5" height="84" rx="18" fill="#ffffff" fill-opacity=".05" stroke="#ffffff" stroke-opacity=".12"/>
 <rect x="40.0" y="212" width="3" height="48" rx="1.5" fill="#00bb7f"/>
-<text x="62.0" y="230" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Room</text>
-<text x="62.0" y="254" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">MMKV</text>
+<text x="62.0" y="230" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Storage</text>
+<text x="62.0" y="254" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">Gson · JSON</text>
 <rect x="323.5" y="194" width="269.5" height="84" rx="18" fill="#ffffff" fill-opacity=".05" stroke="#ffffff" stroke-opacity=".12"/>
 <rect x="323.5" y="212" width="3" height="48" rx="1.5" fill="#fcbb00"/>
-<text x="345.5" y="230" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Glide</text>
-<text x="345.5" y="254" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">Lottie · ZoomImage</text>
+<text x="345.5" y="230" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Coil 3</text>
+<text x="345.5" y="254" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">Custom disk cache</text>
 <rect x="607.0" y="194" width="269.5" height="84" rx="18" fill="#ffffff" fill-opacity=".05" stroke="#ffffff" stroke-opacity=".12"/>
 <rect x="607.0" y="212" width="3" height="48" rx="1.5" fill="#7c6cff"/>
 <text x="629.0" y="230" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">In-house Feeds</text>
@@ -77,10 +77,10 @@
 <text x="345.5" y="352" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">custom DNS · IPv4-only fallback</text>
 <rect x="607.0" y="292" width="269.5" height="84" rx="18" fill="#ffffff" fill-opacity=".05" stroke="#ffffff" stroke-opacity=".12"/>
 <rect x="607.0" y="310" width="3" height="48" rx="1.5" fill="#00bb7f"/>
-<text x="629.0" y="328" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Activity Embedding</text>
-<text x="629.0" y="352" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">tablet two-pane</text>
+<text x="629.0" y="328" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Compose Desktop</text>
+<text x="629.0" y="352" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">native Windows x64</text>
 <rect x="890.5" y="292" width="269.5" height="84" rx="18" fill="#ffffff" fill-opacity=".05" stroke="#ffffff" stroke-opacity=".12"/>
 <rect x="890.5" y="310" width="3" height="48" rx="1.5" fill="#fcbb00"/>
-<text x="912.5" y="328" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Target SDK 36</text>
-<text x="912.5" y="352" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">Android 16 · Min 24</text>
+<text x="912.5" y="328" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="17" font-weight="700" fill="#ffffff">JDK 17</text>
+<text x="912.5" y="352" font-family="Inter, Sora, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans CJK SC', 'Microsoft YaHei', system-ui, sans-serif" font-size="13" fill="#ffffff" fill-opacity=".6">Compose 1.8 · Kotlin 2.1</text>
 </svg>

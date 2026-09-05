@@ -34,7 +34,12 @@ data class QueueJob(
     val urls: List<String>,
     val status: String,
     val error: String? = null,
+    val finished: Int = 0,
+    val total: Int = 0,
 )
+
+/** downloadUrls 在协作取消时抛出的标记文案。 */
+const val DOWNLOAD_CANCELLED = "已取消"
 
 class DownloadQueue(
     private val graph: AppGraph,
@@ -45,6 +50,7 @@ class DownloadQueue(
         private set
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val started = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    private val cancelRequested = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val type = object : TypeToken<MutableList<QueueJob>>() {}.type
 
     @Volatile private var gate = Semaphore(graph.settings.current.maxConcurrentDownloads.coerceIn(1, 8))
@@ -75,8 +81,19 @@ class DownloadQueue(
     }
 
     fun clearFinished() {
-        jobs.removeAll { it.status == "done" || it.status == "error" }
+        jobs.removeAll { it.status == "done" || it.status == "error" || it.status == "canceled" }
         persist()
+    }
+
+    fun cancel(job: QueueJob) {
+        if (job.status == "pending") {
+            started.remove(job.id)
+            val i = jobs.indexOfFirst { it.id == job.id }
+            if (i >= 0) jobs[i] = job.copy(status = "canceled")
+            persist()
+        } else if (job.status == "running") {
+            cancelRequested.add(job.id)
+        }
     }
 
     fun pause(value: Boolean) {
@@ -86,19 +103,21 @@ class DownloadQueue(
 
     fun retry(job: QueueJob) {
         started.remove(job.id)
+        cancelRequested.remove(job.id)
         val i = jobs.indexOfFirst { it.id == job.id }
         if (i < 0) return
-        jobs[i] = job.copy(status = "pending", error = null)
+        jobs[i] = job.copy(status = "pending", error = null, finished = 0)
         persist()
         if (!paused) start(jobs[i])
     }
 
     fun retryAllFailed() {
-        jobs.filter { it.status == "error" }.forEach { retry(it) }
+        jobs.filter { it.status == "error" || it.status == "canceled" }.forEach { retry(it) }
     }
 
     fun remove(job: QueueJob) {
         started.remove(job.id)
+        cancelRequested.remove(job.id)
         jobs.removeAll { it.id == job.id }
         persist()
     }
@@ -119,14 +138,26 @@ class DownloadQueue(
     private suspend fun runJob(job: QueueJob) {
         val idx = jobs.indexOfFirst { it.id == job.id }
         if (idx < 0) return
-        jobs[idx] = job.copy(status = "running")
+        jobs[idx] = job.copy(status = "running", finished = 0, total = job.urls.size)
         persist()
         runCatching {
             val dummy = Illust(id = job.illustId, title = job.title, page_count = job.urls.size)
-            downloadUrls(graph, dummy, job.urls)
+            downloadUrls(
+                graph,
+                dummy,
+                job.urls,
+                isCancelled = { job.id in cancelRequested },
+                onProgress = { done, total ->
+                    val i = jobs.indexOfFirst { it.id == job.id }
+                    if (i >= 0) {
+                        jobs[i] = jobs[i].copy(finished = done, total = total)
+                        persist()
+                    }
+                },
+            )
         }.onSuccess {
             val i = jobs.indexOfFirst { it.id == job.id }
-            if (i >= 0) jobs[i] = jobs[i].copy(status = "done")
+            if (i >= 0) jobs[i] = jobs[i].copy(status = "done", finished = job.urls.size, total = job.urls.size)
             if (graph.settings.current.autoPostLikeWhenDownload) {
                 runCatching {
                     graph.client.api.addBookmark(
@@ -137,8 +168,15 @@ class DownloadQueue(
             }
         }.onFailure { err ->
             val i = jobs.indexOfFirst { it.id == job.id }
-            if (i >= 0) jobs[i] = jobs[i].copy(status = "error", error = err.message)
+            if (i >= 0) {
+                if (err.message == DOWNLOAD_CANCELLED) {
+                    jobs[i] = jobs[i].copy(status = "canceled", error = null)
+                } else {
+                    jobs[i] = jobs[i].copy(status = "error", error = err.message)
+                }
+            }
         }
+        cancelRequested.remove(job.id)
         persist()
     }
 }
@@ -298,16 +336,26 @@ object ShaftSign {
     }
 }
 
-suspend fun downloadUrls(graph: AppGraph, illust: Illust, urls: List<String>) {
+suspend fun downloadUrls(
+    graph: AppGraph,
+    illust: Illust,
+    urls: List<String>,
+    isCancelled: () -> Boolean = { false },
+    onProgress: (Int, Int) -> Unit = { _, _ -> },
+) {
     val settings = graph.settings.current
     val dir = settings.resolvedIllustDir(illust)
     Files.createDirectories(dir)
     urls.forEachIndexed { index, url ->
+        if (isCancelled()) error(DOWNLOAD_CANCELLED)
         val ext = url.substringAfterLast('.', "jpg").substringBefore('?').ifBlank { "jpg" }
         var target = dir.resolve(settings.illustFileName(illust, index, ext))
         if (Files.exists(target)) {
             when (settings.overwritePolicy) {
-                0 -> return@forEachIndexed
+                0 -> {
+                    onProgress(index + 1, urls.size)
+                    return@forEachIndexed
+                }
                 2 -> {
                     var n = 1
                     while (Files.exists(target)) {
@@ -323,6 +371,7 @@ suspend fun downloadUrls(graph: AppGraph, illust: Illust, urls: List<String>) {
             Files.write(target, body.bytes())
         }
         if (settings.silentDownload) runCatching { target.toFile().setLastModified(0L) }
+        onProgress(index + 1, urls.size)
     }
 }
 

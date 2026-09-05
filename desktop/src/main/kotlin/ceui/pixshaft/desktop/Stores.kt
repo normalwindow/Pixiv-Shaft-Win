@@ -170,3 +170,45 @@ class ChatWsClient(
 
 /** 聊天自动刷新用的公共协程作用域。 */
 val ChatPollScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+/** 精华列：本地收藏的作品清单（与 Pixiv 收藏无关）。 */
+class IllustListStore(
+    private val file: java.nio.file.Path,
+    private val gson: Gson = Gson(),
+) {
+    private val type = object : TypeToken<MutableList<Illust>>() {}.type
+    val items = androidx.compose.runtime.mutableStateListOf<Illust>()
+
+    init {
+        if (Files.exists(file)) {
+            runCatching {
+                gson.fromJson<MutableList<Illust>>(Files.readString(file), type).orEmpty().forEach { items += it }
+            }
+        }
+    }
+
+    fun contains(id: Long): Boolean = items.any { it.id == id }
+
+    fun add(illust: Illust) {
+        if (contains(illust.id)) return
+        items.add(0, illust)
+        persist()
+    }
+
+    fun remove(id: Long) {
+        items.removeAll { it.id == id }
+        persist()
+    }
+
+    fun clear() {
+        items.clear()
+        persist()
+    }
+
+    private fun persist() {
+        runCatching {
+            Files.createDirectories(file.parent)
+            Files.writeString(file, gson.toJson(items.toList()))
+        }
+    }
+}

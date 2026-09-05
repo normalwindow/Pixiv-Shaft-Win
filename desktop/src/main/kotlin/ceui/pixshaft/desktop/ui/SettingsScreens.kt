@@ -238,8 +238,15 @@ fun SettingsCategoryScreen(
             "appearance" -> {
                 SettingsGroup("外观") {
                     ChoiceRow("主题模式", listOf("跟随系统", "浅色", "深色"), s.themeMode) { set(s.copy(themeMode = it)) }
-                    ChoiceRow("强调色", listOf("蓝", "紫", "青", "玫红", "琥珀"), s.accentColor) {
+                    ChoiceRow("强调色", listOf("蓝", "紫", "青", "玫红", "琥珀", "绿", "橙", "洋红"), s.accentColor.coerceIn(0, 7)) {
                         set(s.copy(accentColor = it))
+                    }
+                    ChoiceRow(
+                        "语言 / Language",
+                        listOf("跟随系统", "简体中文", "English", "日本語"),
+                        when (s.appLocale) { "zh" -> 1; "en" -> 2; "ja" -> 3; else -> 0 },
+                    ) {
+                        set(s.copy(appLocale = listOf("", "zh", "en", "ja")[it]))
                     }
                     ToggleRow("紧凑界面", "更小间距与圆角", s.compactUi) { set(s.copy(compactUi = it)) }
                     ToggleRow("卡片标题叠在图上", "关闭则标题出现在卡片下方", s.showCardOverlay) {
@@ -338,6 +345,17 @@ fun SettingsCategoryScreen(
                 ToggleRow("详情面板默认折叠", "作品页先只看图", s.detailPanelCollapsedByDefault) {
                     set(s.copy(detailPanelCollapsedByDefault = it))
                 }
+                SettingsGroup("漫画阅读器") {
+                    ChoiceRow("适应方式", listOf("适应宽度", "适应整页"), s.readerFit.coerceIn(0, 1)) {
+                        set(s.copy(readerFit = it))
+                    }
+                    ToggleRow("日漫右开（从右往左翻页）", "方向键与点击区域随方向翻转", s.readerRtl) {
+                        set(s.copy(readerRtl = it))
+                    }
+                    ToggleRow("深色背景", "阅读区使用纯深色底", s.readerDarkBg) {
+                        set(s.copy(readerDarkBg = it))
+                    }
+                }
             }
             "bookmarks" -> SettingsGroup("互动") {
                 ToggleRow("默认私人收藏", "收藏为非公开", s.privateStar) { set(s.copy(privateStar = it)) }
@@ -425,18 +443,19 @@ fun SettingsCategoryScreen(
                         set(s.copy(diskCacheEnabled = it))
                     }
                     if (s.diskCacheEnabled) {
+                        val presets = listOf(512, 1024, 2048, 5120, 10240)
+                        val isCustom = s.diskCacheLimitMb !in presets
                         ChoiceRow(
                             "缓存大小上限",
-                            listOf("512 MB", "1 GB", "2 GB", "5 GB", "10 GB"),
-                            when (s.diskCacheLimitMb) {
-                                512 -> 0
-                                2048 -> 2
-                                5120 -> 3
-                                10240 -> 4
-                                else -> 1
-                            },
+                            listOf("512 MB", "1 GB", "2 GB", "5 GB", "10 GB", "自定义"),
+                            if (isCustom) 5 else presets.indexOf(s.diskCacheLimitMb),
                         ) {
-                            set(s.copy(diskCacheLimitMb = listOf(512, 1024, 2048, 5120, 10240)[it]))
+                            set(s.copy(diskCacheLimitMb = presets.getOrElse(it) { s.diskCacheLimitMb }))
+                        }
+                        if (isCustom) {
+                            TextFieldRow("自定义上限（MB）", s.diskCacheLimitMb.toString()) { v ->
+                                v.toIntOrNull()?.let { set(s.copy(diskCacheLimitMb = it.coerceIn(64, 102400))) }
+                            }
                         }
                     }
                     LinkRow("打开 settings.json", AppPaths.settingsFile.toString()) {

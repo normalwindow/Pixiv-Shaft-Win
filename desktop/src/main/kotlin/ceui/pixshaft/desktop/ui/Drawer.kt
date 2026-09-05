@@ -30,6 +30,7 @@ import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BugReport
 import androidx.compose.material.icons.outlined.Chat
 import androidx.compose.material.icons.outlined.Construction
+import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.History
@@ -113,6 +114,7 @@ fun drawerSections(): List<DrawerSection> = listOf(
     DrawerSection(
         "其他",
         listOf(
+            DrawerItem("热门标签", Dest.TrendingTags, Icons.Outlined.Whatshot),
             DrawerItem("设置", Dest.Settings, Icons.Outlined.Settings),
             DrawerItem("网络测试", Dest.NetworkTest, Icons.Outlined.Wifi),
             DrawerItem("画质提升", Dest.Ai, Icons.Outlined.AutoAwesome),

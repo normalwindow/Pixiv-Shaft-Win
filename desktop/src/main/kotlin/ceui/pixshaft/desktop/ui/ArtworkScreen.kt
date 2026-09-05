@@ -1,5 +1,6 @@
 package ceui.pixshaft.desktop.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -27,8 +28,16 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Bookmark
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.OpenInBrowser
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -118,6 +127,8 @@ fun ArtworkScreen(
             var showPanel by remember(id) {
                 mutableStateOf(!graph.settings.current.detailPanelCollapsedByDefault)
             }
+            var imageCollapsed by remember(id) { mutableStateOf(false) }
+            var menuOpen by remember { mutableStateOf(false) }
 
             fun toggleBookmark() {
                 val target = illust ?: return
@@ -156,121 +167,260 @@ fun ArtworkScreen(
                 scope.launch { snackbar.showSnackbar("已加入下载队列") }
             }
 
+            fun addBatch() {
+                graph.batch.add(item)
+                scope.launch { snackbar.showSnackbar("已加入批量下载清单") }
+            }
+
+            fun addFeature() {
+                graph.features.add(item)
+                scope.launch { snackbar.showSnackbar("已收入精华列") }
+            }
+
             fun openPreview() {
                 preview.open(urls, page.coerceIn(0, urls.lastIndex.coerceAtLeast(0)), item.title)
             }
 
-            if (graph.settings.current.detailStyle == 1) {
-                PhoneDetailLayout(
-                    item = item,
-                    graph = graph,
-                    loader = loader,
-                    page = page,
-                    onPage = { page = it },
-                    onPreview = ::openPreview,
-                    related = related,
-                    bookmarked = item.isBookmarked,
-                    onToggleBookmark = ::toggleBookmark,
-                    onDownload = ::download,
-                    onOpenUser = onOpenUser,
-                    onOpenTag = onOpenTag,
-                    onOpenIllust = onOpenIllust,
-                    onOpenRelated = onOpenRelated,
-                    onOpenManga = onOpenManga,
-                    snackbar = snackbar,
-                    embedded = embedded,
-                    onExpand = onExpand,
-                )
-            } else {
-                Row(Modifier.fillMaxSize()) {
-                    Column(
-                        Modifier.weight(if (showPanel) 1.15f else 1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        if (!showPanel) {
-                            AssistChip(onClick = { showPanel = true }, label = { Text("显示资料") })
+            Box(Modifier.fillMaxSize()) {
+                if (graph.settings.current.detailStyle == 1) {
+                    PhoneDetailLayout(
+                        item = item,
+                        graph = graph,
+                        loader = loader,
+                        page = page,
+                        onPage = { page = it },
+                        onPreview = ::openPreview,
+                        imageCollapsed = imageCollapsed,
+                        onToggleImageCollapsed = { imageCollapsed = !imageCollapsed },
+                        related = related,
+                        bookmarked = item.isBookmarked,
+                        onToggleBookmark = ::toggleBookmark,
+                        onDownload = ::download,
+                        onOpenUser = onOpenUser,
+                        onOpenTag = onOpenTag,
+                        onOpenIllust = onOpenIllust,
+                        onOpenRelated = onOpenRelated,
+                        onOpenManga = onOpenManga,
+                        snackbar = snackbar,
+                        embedded = embedded,
+                        onExpand = onExpand,
+                        menuOpen = menuOpen,
+                        onMenuOpen = { menuOpen = true },
+                        onMenuDismiss = { menuOpen = false },
+                        menuActions = DetailMenuActions(
+                            onToggleBookmark = ::toggleBookmark,
+                            onDownload = ::download,
+                            onAddBatch = ::addBatch,
+                            onAddFeature = ::addFeature,
+                            onCopyIllustId = { copySnackbar(snackbar, scope, item.id.toString()) },
+                            onCopyUserId = { item.user?.id?.let { copySnackbar(snackbar, scope, it.toString()) } },
+                            onOpenInBrowser = {
+                                runCatching {
+                                    java.awt.Desktop.getDesktop().browse(java.net.URI("https://www.pixiv.net/artworks/${item.id}"))
+                                }
+                            },
+                            onOpenManga = if (item.isManga()) ({ onOpenManga(item.id) }) else null,
+                            onExpand = onExpand.takeIf { embedded },
+                            onTogglePanel = null,
+                            onToggleImageCollapsed = { imageCollapsed = !imageCollapsed },
+                        ),
+                    )
+                } else {
+                    Row(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier.weight(if (showPanel) 1.15f else 1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            IllustPager(
+                                item = item,
+                                graph = graph,
+                                loader = loader,
+                                page = page,
+                                onPage = { page = it },
+                                onPreview = ::openPreview,
+                            )
                         }
-                        IllustPager(
-                            item = item,
-                            graph = graph,
-                            loader = loader,
-                            page = page,
-                            onPage = { page = it },
-                            onPreview = ::openPreview,
-                        )
-                    }
-                    if (showPanel) Column(
-                        Modifier.weight(0.85f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(20.dp),
-                    ) {
-                        Text(item.title ?: "#${item.id}", style = MaterialTheme.typography.headlineSmall)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            AssistChip(onClick = { showPanel = false }, label = { Text("收起资料") })
-                            if (embedded && onExpand != null) {
-                                AssistChip(onClick = onExpand, label = { Text("全屏查看") })
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        AuthorRow(item, loader, onOpenUser)
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "${item.total_bookmarks ?: 0} 收藏 · ${item.total_view ?: 0} 浏览 · ${item.create_date?.substringBefore('T').orEmpty()}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            FilledTonalButton(onClick = { toggleBookmark() }) {
-                                Icon(
-                                    if (item.isBookmarked) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (item.isBookmarked) "已收藏" else "收藏")
-                            }
-                            OutlinedButton(onClick = { download() }) {
-                                Icon(Icons.Outlined.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("下载")
-                            }
-                            if (item.isManga()) {
-                                OutlinedButton(onClick = { onOpenManga(item.id) }) { Text("漫画阅读器") }
-                            }
-                        }
-                        if (!item.caption.isNullOrBlank()) {
-                            Spacer(Modifier.height(12.dp))
-                            Text(stripHtml(item.caption!!), style = MaterialTheme.typography.bodyMedium)
-                        }
-                        if (!item.tags.isNullOrEmpty()) {
-                            Spacer(Modifier.height(12.dp))
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                item.tags.orEmpty().forEach { tag ->
-                                    AssistChip(
-                                        onClick = { tag.name?.let(onOpenTag) },
-                                        label = { Text("#${tag.display()}") },
-                                    )
+                        if (showPanel) Column(
+                            Modifier.weight(0.85f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(20.dp),
+                        ) {
+                            Text(item.title ?: "#${item.id}", style = MaterialTheme.typography.headlineSmall)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                AuthorRow(item, loader, onOpenUser, Modifier.weight(1f))
+                                IconButton(onClick = { menuOpen = true }) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = "菜单")
                                 }
                             }
+                            IllustDetailMenu(
+                                expanded = menuOpen,
+                                onDismiss = { menuOpen = false },
+                                bookmarked = item.isBookmarked,
+                                actions = DetailMenuActions(
+                                    onToggleBookmark = ::toggleBookmark,
+                                    onDownload = ::download,
+                                    onAddBatch = ::addBatch,
+                                    onAddFeature = ::addFeature,
+                                    onCopyIllustId = { copySnackbar(snackbar, scope, item.id.toString()) },
+                                    onCopyUserId = { item.user?.id?.let { copySnackbar(snackbar, scope, it.toString()) } },
+                                    onOpenInBrowser = {
+                                        runCatching {
+                                            java.awt.Desktop.getDesktop().browse(java.net.URI("https://www.pixiv.net/artworks/${item.id}"))
+                                        }
+                                    },
+                                    onOpenManga = if (item.isManga()) ({ onOpenManga(item.id) }) else null,
+                                    onExpand = onExpand.takeIf { embedded },
+                                    onTogglePanel = { showPanel = !showPanel },
+                                    onToggleImageCollapsed = null,
+                                ),
+                                showPanel = showPanel,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "${item.total_bookmarks ?: 0} 收藏 · ${item.total_view ?: 0} 浏览 · ${item.create_date?.substringBefore('T').orEmpty()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilledTonalButton(onClick = { toggleBookmark() }) {
+                                    Icon(
+                                        if (item.isBookmarked) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(if (item.isBookmarked) "已收藏" else "收藏")
+                                }
+                                OutlinedButton(onClick = { download() }) {
+                                    Icon(Icons.Outlined.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("下载")
+                                }
+                                if (item.isManga()) {
+                                    OutlinedButton(onClick = { onOpenManga(item.id) }) { Text("漫画阅读器") }
+                                }
+                            }
+                            if (!item.caption.isNullOrBlank()) {
+                                Spacer(Modifier.height(12.dp))
+                                Text(stripHtml(item.caption!!), style = MaterialTheme.typography.bodyMedium)
+                            }
+                            if (!item.tags.isNullOrEmpty()) {
+                                Spacer(Modifier.height(12.dp))
+                                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item.tags.orEmpty().forEach { tag ->
+                                        AssistChip(
+                                            onClick = { tag.name?.let(onOpenTag) },
+                                            label = { Text("#${tag.display()}") },
+                                        )
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            CopyableMeta(item, snackbar, scope)
+                            CommentsSection(graph, id, loader, Modifier.padding(top = 12.dp))
+                            Spacer(Modifier.height(8.dp))
+                            RelatedStrip(
+                                related = related,
+                                illustId = item.id,
+                                loader = loader,
+                                onOpenIllust = onOpenIllust,
+                                onOpenRelated = onOpenRelated,
+                            )
                         }
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            "作品 ID ${item.id} · 作者 UID ${item.user?.id ?: "?"} · ${item.width}×${item.height}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        CommentsSection(graph, id, loader, Modifier.padding(top = 12.dp))
-                        Spacer(Modifier.height(8.dp))
-                        RelatedStrip(
-                            related = related,
-                            illustId = item.id,
-                            loader = loader,
-                            onOpenIllust = onOpenIllust,
-                            onOpenRelated = onOpenRelated,
-                        )
                     }
                 }
             }
         }
+    }
+}
+
+/** 详情菜单动作集合。 */
+data class DetailMenuActions(
+    val onToggleBookmark: () -> Unit,
+    val onDownload: () -> Unit,
+    val onAddBatch: () -> Unit,
+    val onAddFeature: () -> Unit,
+    val onCopyIllustId: () -> Unit,
+    val onCopyUserId: () -> Unit,
+    val onOpenInBrowser: () -> Unit,
+    val onOpenManga: (() -> Unit)? = null,
+    val onExpand: (() -> Unit)? = null,
+    val onTogglePanel: (() -> Unit)? = null,
+    val onToggleImageCollapsed: (() -> Unit)? = null,
+)
+
+@Composable
+private fun IllustDetailMenu(
+    expanded: Boolean,
+    onDismiss: () -> Unit,
+    bookmarked: Boolean,
+    actions: DetailMenuActions,
+    showPanel: Boolean? = null,
+) {
+    DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+        DropdownMenuItem(
+            text = { Text(if (bookmarked) "取消收藏" else "❤ 收藏") },
+            onClick = { actions.onToggleBookmark(); onDismiss() },
+        )
+        DropdownMenuItem(text = { Text("下载") }, onClick = { actions.onDownload; onDismiss() })
+        DropdownMenuItem(text = { Text("加入批量下载") }, onClick = { actions.onAddBatch; onDismiss() })
+        DropdownMenuItem(text = { Text("收入精华列") }, onClick = { actions.onAddFeature; onDismiss() })
+        actions.onOpenManga?.let {
+            DropdownMenuItem(text = { Text("漫画阅读器") }, onClick = { it(); onDismiss() })
+        }
+        actions.onExpand?.let {
+            DropdownMenuItem(text = { Text("全屏查看") }, onClick = { it(); onDismiss() })
+        }
+        actions.onTogglePanel?.let {
+            DropdownMenuItem(
+                text = { Text(if (showPanel == true) "收起资料" else "显示资料") },
+                onClick = { it(); onDismiss() },
+            )
+        }
+        actions.onToggleImageCollapsed?.let {
+            DropdownMenuItem(text = { Text("收起 / 展开图片") }, onClick = { it(); onDismiss() })
+        }
+        DropdownMenuItem(text = { Text("复制作品 ID") }, onClick = { actions.onCopyIllustId(); onDismiss() })
+        DropdownMenuItem(text = { Text("复制作者 ID") }, onClick = { actions.onCopyUserId(); onDismiss() })
+        DropdownMenuItem(text = { Text("在浏览器打开") }, onClick = { actions.onOpenInBrowser; onDismiss() })
+    }
+}
+
+fun copySnackbar(snackbar: SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope, text: String) {
+    copyToClipboard(text)
+    scope.launch { snackbar.showSnackbar("已复制：$text") }
+}
+
+/** 作品 ID / 作者 ID 可点击复制行。 */
+@Composable
+private fun CopyableMeta(item: Illust, snackbar: SnackbarHostState, scope: kotlinx.coroutines.CoroutineScope) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "作品 ID ${item.id}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .clickable { copySnackbar(snackbar, scope, item.id.toString()) }
+                .padding(horizontal = 4.dp, vertical = 2.dp),
+        )
+        Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        item.user?.id?.let { uid ->
+            Text(
+                "作者 UID $uid",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .clickable { copySnackbar(snackbar, scope, uid.toString()) }
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            )
+            Text("  ·  ", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(
+            "${item.width}×${item.height}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
@@ -291,7 +441,7 @@ private fun IllustPager(
     val urls = item.viewUrls(original = graph.settings.current.showOriginalPreviewImage)
     if (urls.isEmpty()) return
     if (urls.size == 1) {
-        PixivImage(
+        LoadableImage(
             url = urls.first(),
             contentDescription = item.title,
             contentScale = ContentScale.FillWidth,
@@ -303,7 +453,7 @@ private fun IllustPager(
     val current = page.coerceIn(0, urls.lastIndex)
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Box {
-            PixivImage(
+            LoadableImage(
                 url = urls[current],
                 contentDescription = "${item.title} 第 ${current + 1} 页",
                 contentScale = ContentScale.FillWidth,
@@ -383,9 +533,9 @@ private fun IllustPager(
 }
 
 @Composable
-private fun AuthorRow(item: Illust, loader: ImageLoader, onOpenUser: (Long) -> Unit) {
+private fun AuthorRow(item: Illust, loader: ImageLoader, onOpenUser: (Long) -> Unit, modifier: Modifier = Modifier) {
     val user = item.user ?: return
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(40.dp).clip(CircleShape).clickable { onOpenUser(user.id) }) {
             PixivImage(user.avatar(), user.name, loader = loader)
         }
@@ -397,7 +547,7 @@ private fun AuthorRow(item: Illust, loader: ImageLoader, onOpenUser: (Long) -> U
     }
 }
 
-/** 手机原样模式：仿手机 App 的单列排版，图在上，信息在下。 */
+/** 手机原样模式：仿手机 App 的单列排版，图在上、信息在下；图片区可整体收起（抽屉开关）。 */
 @Composable
 private fun PhoneDetailLayout(
     item: Illust,
@@ -406,6 +556,8 @@ private fun PhoneDetailLayout(
     page: Int,
     onPage: (Int) -> Unit,
     onPreview: () -> Unit,
+    imageCollapsed: Boolean,
+    onToggleImageCollapsed: () -> Unit,
     related: List<Illust>,
     bookmarked: Boolean,
     onToggleBookmark: () -> Unit,
@@ -418,14 +570,85 @@ private fun PhoneDetailLayout(
     snackbar: SnackbarHostState,
     embedded: Boolean,
     onExpand: (() -> Unit)?,
+    menuOpen: Boolean,
+    onMenuOpen: () -> Unit,
+    onMenuDismiss: () -> Unit,
+    menuActions: DetailMenuActions,
 ) {
     val scope = rememberCoroutineScope()
     var following by remember(item.id) { mutableStateOf(item.user?.is_followed == true) }
+    val urls = item.viewUrls(original = graph.settings.current.showOriginalPreviewImage)
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        IllustPager(item = item, graph = graph, loader = loader, page = page, onPage = onPage, onPreview = onPreview)
+        // 顶部条：标题 + 折叠图片 + 菜单
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                item.title ?: "#${item.id}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = onToggleImageCollapsed) {
+                Icon(
+                    if (imageCollapsed) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess,
+                    contentDescription = if (imageCollapsed) "展开图片" else "收起图片",
+                )
+            }
+            Box {
+                IconButton(onClick = onMenuOpen) {
+                    Icon(Icons.Outlined.MoreVert, contentDescription = "菜单")
+                }
+                IllustDetailMenu(
+                    expanded = menuOpen,
+                    onDismiss = onMenuDismiss,
+                    bookmarked = bookmarked,
+                    actions = menuActions,
+                )
+            }
+        }
+        if (imageCollapsed) {
+            // 抽屉收起态：缩略图细条，点一下展开
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { onToggleImageCollapsed() }
+                    .padding(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PixivImage(
+                    url = urls.getOrNull(page.coerceIn(0, urls.lastIndex.coerceAtLeast(0))),
+                    contentDescription = item.title,
+                    contentScale = ContentScale.Crop,
+                    loader = loader,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                )
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(item.title ?: "#${item.id}", style = MaterialTheme.typography.titleSmall, maxLines = 1)
+                    Text(
+                        if (urls.size > 1) "已收起图片（${page.coerceIn(0, urls.lastIndex.coerceAtLeast(0)) + 1}/${urls.size}）· 点击展开"
+                        else "已收起图片 · 点击展开",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Icon(Icons.Outlined.ExpandMore, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        } else {
+            IllustPager(item = item, graph = graph, loader = loader, page = page, onPage = onPage, onPreview = onPreview)
+        }
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -499,11 +722,6 @@ private fun PhoneDetailLayout(
             }
         }
         Text(
-            item.title ?: "#${item.id}",
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
-        Text(
             "${item.total_view ?: 0} 浏览 · ${item.width}×${item.height} · ${if (item.isGif()) "动图" else if (item.isManga()) "漫画" else "插画"}",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -529,12 +747,7 @@ private fun PhoneDetailLayout(
                 modifier = Modifier.padding(horizontal = 16.dp),
             )
         }
-        Text(
-            "作品 ID ${item.id} · 作者 UID ${item.user?.id ?: "?"}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 16.dp),
-        )
+        CopyableMeta(item, snackbar, scope)
         CommentsSection(graph, item.id, loader, Modifier.padding(horizontal = 16.dp))
         RelatedStrip(
             related = related,

@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Favorite
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Remove
 import androidx.compose.material3.Button
@@ -48,6 +50,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -55,8 +59,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.isCtrlPressed
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
@@ -93,6 +99,10 @@ fun IllustWaterfall(
     columnsOverride: Int = 0,
     header: @Composable (() -> Unit)? = null,
     gridKey: Any = Unit,
+    onToggleBookmark: ((Illust) -> Unit)? = null,
+    onAddBatch: ((Illust) -> Unit)? = null,
+    onAddFeature: ((Illust) -> Unit)? = null,
+    onHide: ((Illust) -> Unit)? = null,
 ) {
     val unique = illusts.uniqueIllusts()
     val ui = LocalDesktopSettings.current
@@ -103,10 +113,11 @@ fun IllustWaterfall(
         Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
-                // Ctrl+滚轮 / 触控板双指捏合（Windows 精确触控板默认映射为 Ctrl+滚动）无极缩放
+                // Ctrl+滚轮 / 触控板双指捏合无极缩放。
+                // 监听 Initial pass：先于网格的滚动处理并消费事件，缩放时页面不会跟着上下滚。
                 awaitPointerEventScope {
                     while (true) {
-                        val event = awaitPointerEvent()
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
                         if (event.type == PointerEventType.Scroll && event.keyboardModifiers.isCtrlPressed) {
                             val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
                             if (delta != 0f) {
@@ -151,7 +162,13 @@ fun IllustWaterfall(
                     item(span = StaggeredGridItemSpan.FullLine) { header() }
                 }
                 items(unique, key = { it.id }) { illust ->
-                    IllustCard(illust, loader, onOpen, compact = chrome.split)
+                    IllustCard(
+                        illust, loader, onOpen, compact = chrome.split,
+                        onToggleBookmark = onToggleBookmark,
+                        onAddBatch = onAddBatch,
+                        onAddFeature = onAddFeature,
+                        onHide = onHide,
+                    )
                 }
                 if (loadingMore) {
                     item(span = StaggeredGridItemSpan.FullLine) {
@@ -173,7 +190,13 @@ fun IllustWaterfall(
                     item(span = { GridItemSpan(columns) }) { header() }
                 }
                 gridItems(unique, key = { it.id }) { illust ->
-                    IllustCard(illust, loader, onOpen, forceSquare = true, compact = chrome.split)
+                    IllustCard(
+                        illust, loader, onOpen, forceSquare = true, compact = chrome.split,
+                        onToggleBookmark = onToggleBookmark,
+                        onAddBatch = onAddBatch,
+                        onAddFeature = onAddFeature,
+                        onHide = onHide,
+                    )
                 }
                 if (loadingMore) {
                     item(span = { GridItemSpan(columns) }) {
@@ -295,6 +318,10 @@ private fun IllustCard(
     onOpen: (Illust) -> Unit,
     forceSquare: Boolean = false,
     compact: Boolean = false,
+    onToggleBookmark: ((Illust) -> Unit)? = null,
+    onAddBatch: ((Illust) -> Unit)? = null,
+    onAddFeature: ((Illust) -> Unit)? = null,
+    onHide: ((Illust) -> Unit)? = null,
 ) {
     val ratio = if (forceSquare) {
         0.78f
@@ -309,9 +336,14 @@ private fun IllustCard(
         onOpen = onOpen,
         modifier = Modifier.fillMaxWidth().aspectRatio(ratio),
         compact = compact,
+        onToggleBookmark = onToggleBookmark,
+        onAddBatch = onAddBatch,
+        onAddFeature = onAddFeature,
+        onHide = onHide,
     )
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun IllustPoster(
     illust: Illust,
@@ -319,11 +351,16 @@ private fun IllustPoster(
     onOpen: (Illust) -> Unit,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    onToggleBookmark: ((Illust) -> Unit)? = null,
+    onAddBatch: ((Illust) -> Unit)? = null,
+    onAddFeature: ((Illust) -> Unit)? = null,
+    onHide: ((Illust) -> Unit)? = null,
 ) {
     val policy = LocalImagePolicy.current
     val ui = LocalDesktopSettings.current
     val selected = LocalBrowseChrome.current.selectedId == illust.id
     val radius = if (ui.compactUi || compact) 10.dp else 14.dp
+    var menuOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val title = illust.title?.ifBlank { "#${illust.id}" } ?: "#${illust.id}"
     val meta = buildList {
         illust.user?.name?.takeIf { it.isNotBlank() }?.let(::add)
@@ -338,6 +375,7 @@ private fun IllustPoster(
                 if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(radius))
                 else Modifier,
             )
+            .onPointerSecondaryPress { menuOpen = true }
             .clickable { onOpen(illust) },
     ) {
         Box(Modifier.fillMaxSize()) {
@@ -369,6 +407,23 @@ private fun IllustPoster(
                     if (illust.isAi()) BadgeChip("AI")
                 }
             }
+            // 收藏爱心（可在设置中隐藏）
+            if (onToggleBookmark != null && ui.showLikeButton) {
+                val heartTint = if (illust.isBookmarked) MaterialTheme.colorScheme.primary else Color.White
+                Icon(
+                    if (illust.isBookmarked) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = if (illust.isBookmarked) "取消收藏" else "收藏",
+                    tint = heartTint,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(6.dp)
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .padding(5.dp)
+                        .clickable { onToggleBookmark(illust) },
+                )
+            }
             if (ui.showCardOverlay) {
                 Column(Modifier.align(Alignment.BottomStart).padding(if (compact) 8.dp else 10.dp)) {
                     Text(
@@ -390,9 +445,37 @@ private fun IllustPoster(
                     }
                 }
             }
+            IllustContextMenu(
+                illust = illust,
+                expanded = menuOpen,
+                onDismiss = { menuOpen = false },
+                actions = IllustMenuActions(
+                    onBookmark = onToggleBookmark?.let { fn -> ({ fn(illust) }) },
+                    onDownload = null,
+                    onAddBatch = onAddBatch?.let { fn -> ({ fn(illust) }) },
+                    onAddFeature = onAddFeature?.let { fn -> ({ fn(illust) }) },
+                    onCopyIllustId = { copyToClipboard(illust.id.toString()) },
+                    onOpenInBrowser = { runCatching { java.awt.Desktop.getDesktop().browse(java.net.URI("https://www.pixiv.net/artworks/${illust.id}")) } },
+                    onHide = onHide?.let { fn -> ({ fn(illust) }) },
+                ),
+            )
         }
     }
 }
+
+/** 右键按下时触发一次动作（桌面右键 = 手机长按）。 */
+private fun Modifier.onPointerSecondaryPress(action: () -> Unit): Modifier =
+    pointerInput(Unit) {
+        awaitPointerEventScope {
+            while (true) {
+                val event = awaitPointerEvent()
+                if (event.type == PointerEventType.Press && event.buttons.isSecondaryPressed) {
+                    action()
+                    event.changes.forEach { it.consume() }
+                }
+            }
+        }
+    }
 
 @Composable
 private fun BadgeChip(text: String) {

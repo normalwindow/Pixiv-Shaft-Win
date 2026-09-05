@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
@@ -52,6 +53,7 @@ import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material.icons.outlined.SwapHoriz
+import androidx.compose.material.icons.outlined.Whatshot
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -162,6 +164,7 @@ fun ShaftApp(graph: AppGraph, initialUri: String?, windowState: WindowState) {
             LocalDesktopSettings provides graph.settings.current,
             LocalImagePreview provides imagePreview,
             LocalFeedZoom provides feedZoom,
+            LocalAppLocale provides graph.settings.current.appLocale,
         ) {
             Surface(Modifier.fillMaxSize()) {
                 if (!loggedIn) {
@@ -474,7 +477,12 @@ private fun DestContent(
     onLogout: () -> Unit,
 ) {
     when (dest) {
-        Dest.Home -> HomePage(graph, loader, onOpen = openIllust, onTag = { push(Dest.Search(it)) })
+        Dest.Home -> HomePage(
+            graph = graph,
+            loader = loader,
+            onOpen = openIllust,
+            onOpenTags = { push(Dest.TrendingTags) },
+        )
         Dest.Ranking -> RankingPage(graph, loader, onOpen = openIllust)
         Dest.Following -> FollowingPage(
             graph = graph,
@@ -547,7 +555,10 @@ private fun DestContent(
             onOpenRelated = { push(Dest.Related(it)) },
         )
         is Dest.Related -> RelatedPage(graph, loader, dest.id, openIllust)
-        is Dest.User -> UserScreen(graph, dest.id, loader, snackbar, openIllust)
+        Dest.TrendingTags -> TrendingTagsPage(graph, loader, onOpen = openIllust, onTag = { push(Dest.Search(it)) })
+        Dest.Discovery -> DiscoveryScreen(graph, loader, onOpen = openIllust)
+        Dest.Plaza -> PlazaScreen(graph, loader, onOpenIllust = openIllustId, onOpenUser = { push(Dest.User(it)) }, onOpenNovel = { push(Dest.Novel(it)) })
+        is Dest.User -> UserScreen(graph, dest.id, loader, snackbar, openIllust, onOpenUser = { push(Dest.User(it)) })
         Dest.NovelBookmarks -> {
             val uid = graph.sessionStore.user?.id
             if (uid == null) Text("未登录", modifier = Modifier.padding(24.dp))
@@ -601,44 +612,43 @@ private fun SplitBrowsePlaceholder() {
     }
 }
 
-/** 首页：热门标签条 + 刷新 + 插画/漫画切换 + 推荐瀑布流。 */
+/** 首页：热门标签入口 + 刷新 + 插画/漫画切换 + 推荐瀑布流。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomePage(
     graph: AppGraph,
     loader: ImageLoader,
     onOpen: (Illust) -> Unit,
-    onTag: (String) -> Unit,
+    onOpenTags: () -> Unit,
 ) {
     var type by rememberSaveable { mutableStateOf("illust") }
-    var tags by remember { mutableStateOf<List<ceui.pixshaft.shared.model.TrendingTag>>(emptyList()) }
-    LaunchedEffect(Unit) {
-        runCatching { withContext(Dispatchers.IO) { graph.client.api.trendingTags("illust") } }
-            .onSuccess { tags = it.trend_tags }
-    }
     Column(Modifier.fillMaxSize()) {
         Row(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                "热门标签",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.width(10.dp))
-            Row(
-                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                tonalElevation = 1.dp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(18.dp))
+                    .clickable(onClick = onOpenTags),
             ) {
-                tags.take(18).forEach { tag ->
-                    FilterChip(
-                        selected = false,
-                        onClick = { tag.tag?.let(onTag) },
-                        label = { Text("#${tag.display()}") },
+                Row(
+                    Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.Outlined.Whatshot,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
                     )
+                    Spacer(Modifier.width(6.dp))
+                    Text(tr()["hotTags"], style = MaterialTheme.typography.labelLarge)
                 }
             }
+            Spacer(Modifier.weight(1f))
             IconButton(onClick = { graph.feedStore.refresh("home:$type") }) {
                 Icon(Icons.Outlined.Refresh, contentDescription = "刷新推荐")
             }
@@ -710,9 +720,9 @@ private fun RankingPage(
             Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterChip(selected = !mangaMode, onClick = { mangaMode = false; mode = "day" }, label = { Text("插画") })
+            FilterChip(selected = !mangaMode, onClick = { mangaMode = false; mode = "day" }, label = { Text(tr()["illust"]) })
             Spacer(Modifier.width(6.dp))
-            FilterChip(selected = mangaMode, onClick = { mangaMode = true; mode = "day_manga" }, label = { Text("漫画") })
+            FilterChip(selected = mangaMode, onClick = { mangaMode = true; mode = "day_manga" }, label = { Text(tr()["manga"]) })
             Spacer(Modifier.width(10.dp))
             IconButton(onClick = { showDatePicker = true }) {
                 Icon(Icons.Outlined.Event, contentDescription = "选择日期")
@@ -728,12 +738,16 @@ private fun RankingPage(
                 )
             }
         }
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        HorizontalWheelRow(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
         ) {
             modes.forEach { (id, label) ->
-                FilterChip(selected = mode == id, onClick = { mode = id }, label = { Text(label) })
+                FilterChip(
+                    selected = mode == id,
+                    onClick = { mode = id },
+                    label = { Text(label) },
+                    modifier = Modifier.padding(end = 2.dp),
+                )
             }
         }
         SimpleFeedPage(
@@ -750,7 +764,7 @@ private fun RankingPage(
     }
     if (showDatePicker) {
         RankingDateDialog(
-            initial = date,
+            initial = if (date.isBlank()) java.time.LocalDate.now().toString() else date,
             onDismiss = { showDatePicker = false },
             onConfirm = {
                 date = it
@@ -760,39 +774,77 @@ private fun RankingPage(
     }
 }
 
+/** 月历式日期选择：上一月 / 下一月 / 点选日期 / 回到今日。 */
 @Composable
 private fun RankingDateDialog(initial: String, onDismiss: () -> Unit, onConfirm: (String) -> Unit) {
-    var text by remember { mutableStateOf(initial) }
-    val parsed = runCatching { java.time.LocalDate.parse(text.trim()) }.getOrNull()
+    var month by remember { mutableStateOf(runCatching { java.time.LocalDate.parse(initial).withDayOfMonth(1) }.getOrDefault(java.time.LocalDate.now().withDayOfMonth(1))) }
+    var selected by remember { mutableStateOf(runCatching { java.time.LocalDate.parse(initial) }.getOrNull()) }
+    val today = java.time.LocalDate.now()
+    val firstDow = month.dayOfWeek.value % 7 // 周日=0
+    val daysInMonth = month.lengthOfMonth()
+    val cells: List<java.time.LocalDate?> = List(firstDow) { null } + (1..daysInMonth).map { month.withDayOfMonth(it) }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("选择日期") },
         text = {
             Column {
-                Text(
-                    "查看某一天的历史榜单（格式 YYYY-MM-DD，仅日 / 周 / 月榜生效）",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    singleLine = true,
-                    label = { Text("YYYY-MM-DD") },
-                    isError = text.isNotBlank() && parsed == null,
-                    supportingText = {
-                        if (text.isNotBlank() && parsed == null) Text("日期格式不正确")
-                    },
-                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    IconButton(onClick = { month = month.minusMonths(1) }) {
+                        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, contentDescription = "上一月")
+                    }
+                    Text("${month.year} 年 ${month.monthValue} 月", style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { month = month.plusMonths(1) }) {
+                        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = "下一月")
+                    }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    listOf("日", "一", "二", "三", "四", "五", "六").forEach {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                cells.chunked(7).forEach { week ->
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                        week.forEach { day ->
+                            Box(Modifier.size(34.dp), contentAlignment = Alignment.Center) {
+                                if (day != null) {
+                                    val isSel = selected == day
+                                    val isToday = day == today
+                                    Surface(
+                                        shape = CircleShape,
+                                        color = when {
+                                            isSel -> MaterialTheme.colorScheme.primary
+                                            isToday -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            else -> Color.Transparent
+                                        },
+                                        modifier = Modifier
+                                            .size(30.dp)
+                                            .clip(CircleShape)
+                                            .clickable { selected = day },
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                "${day.dayOfMonth}",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = if (isSel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                TextButton(onClick = { onConfirm("") }) { Text("回到今日（不指定日期）") }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(text.trim()) }, enabled = parsed != null) { Text("确定") }
+            TextButton(onClick = { selected?.let { onConfirm(it.toString()) } }, enabled = selected != null) { Text("确定") }
         },
-        dismissButton = {
-            TextButton(onClick = { onConfirm("") }) { Text("回到今日") }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
     )
 }
 
@@ -806,16 +858,15 @@ private fun FollowingPage(
 ) {
     var novelMode by rememberSaveable { mutableStateOf(false) }
     var restrict by rememberSaveable { mutableStateOf("all") }
+    val t = tr()
     Column(Modifier.fillMaxSize()) {
-        Row(
+        HorizontalWheelRow(
             Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
         ) {
-            FilterChip(selected = !novelMode, onClick = { novelMode = false }, label = { Text("插画 · 漫画") })
-            FilterChip(selected = novelMode, onClick = { novelMode = true }, label = { Text("小说") })
+            FilterChip(selected = !novelMode, onClick = { novelMode = false }, label = { Text(t["illustManga"]) })
+            FilterChip(selected = novelMode, onClick = { novelMode = true }, label = { Text(t["novel"]) })
             Spacer(Modifier.width(6.dp))
-            listOf("all" to "全部", "public" to "公开", "private" to "私人").forEach { (value, label) ->
+            listOf("all" to t["all"], "public" to t["public"], "private" to t["private"]).forEach { (value, label) ->
                 FilterChip(selected = restrict == value, onClick = { restrict = value }, label = { Text(label) })
             }
         }
@@ -858,16 +909,16 @@ private fun SearchPage(
     val target = graph.settings.current.searchTarget
     val bookmarkMin = graph.settings.current.searchBookmarkMin
     val r18 = graph.settings.current.searchR18
+    val t = tr()
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp).horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        HorizontalWheelRow(
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         ) {
             Text(
-                "筛选",
+                t["filter"],
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(end = 4.dp, top = 12.dp),
             )
             listOf("date_desc" to "最新", "date_asc" to "最旧", "popular_desc" to "热度").forEach { (value, label) ->
                 FilterChip(
@@ -1046,6 +1097,79 @@ private fun RelatedPage(
     )
 }
 
+/** 热门标签独立页：标签 + 封面网格（对齐手机端热门标签页）。 */
+@Composable
+private fun TrendingTagsPage(
+    graph: AppGraph,
+    loader: ImageLoader,
+    onOpen: (Illust) -> Unit,
+    onTag: (String) -> Unit,
+) {
+    var tags by remember { mutableStateOf<List<ceui.pixshaft.shared.model.TrendingTag>>(emptyList()) }
+    var loading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching { withContext(Dispatchers.IO) { graph.client.api.trendingTags("illust") } }
+            .onSuccess { tags = it.trend_tags; error = null }
+            .onFailure { error = it.userMessage() }
+        loading = false
+    }
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            tr()["hotTags"],
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
+        )
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                !error.isNullOrBlank() && tags.isEmpty() -> Text(
+                    error!!,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                )
+                else -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(220.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(
+                        tags.filter { it.illust != null },
+                        key = { it.tag.orEmpty().ifBlank { "#${System.identityHashCode(it)}" } },
+                    ) { tag ->
+                        val illust = tag.illust ?: return@items
+                        Column(
+                            Modifier
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { tag.tag?.let(onTag) },
+                        ) {
+                            PixivImage(
+                                url = illust.previewUrl(large = graph.settings.current.showLargeThumbnailImage),
+                                contentDescription = tag.display(),
+                                loader = loader,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(160.dp)
+                                    .clip(RoundedCornerShape(14.dp)),
+                            )
+                            Text(
+                                "#${tag.display()}",
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun ShaftRail(
     hidden: Boolean,
@@ -1192,6 +1316,7 @@ private fun RailItems(
     onToggleHidden: () -> Unit,
     onOpenDrawer: () -> Unit,
 ) {
+    val t = tr()
     Column(
         Modifier.fillMaxHeight().padding(vertical = 10.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.Start,
@@ -1200,34 +1325,34 @@ private fun RailItems(
             expanded = expanded,
             selected = false,
             icon = Icons.AutoMirrored.Outlined.KeyboardArrowLeft,
-            label = "返回",
+            label = t["back"],
             onClick = onBack,
             enabled = canGoBack,
         )
         Spacer(Modifier.height(8.dp))
-        RailGlyph(expanded, selected == RailTab.Home, Icons.Outlined.Home, "首页", onHome)
-        RailGlyph(expanded, selected == RailTab.Ranking, Icons.Outlined.Star, "排行", onRanking)
-        RailGlyph(expanded, selected == RailTab.Following, Icons.Outlined.Explore, "关注", onFollowing)
-        RailGlyph(expanded, selected == RailTab.Search, Icons.Outlined.Search, "搜索", onSearch)
-        RailGlyph(expanded, selected == RailTab.Me, Icons.Outlined.Person, "我的", onMe)
-        RailGlyph(expanded, selected == RailTab.Download, Icons.Outlined.Download, "下载", onDownload)
+        RailGlyph(expanded, selected == RailTab.Home, Icons.Outlined.Home, t["home"], onHome)
+        RailGlyph(expanded, selected == RailTab.Ranking, Icons.Outlined.Star, t["ranking"], onRanking)
+        RailGlyph(expanded, selected == RailTab.Following, Icons.Outlined.Explore, t["following"], onFollowing)
+        RailGlyph(expanded, selected == RailTab.Search, Icons.Outlined.Search, t["search"], onSearch)
+        RailGlyph(expanded, selected == RailTab.Me, Icons.Outlined.Person, t["me"], onMe)
+        RailGlyph(expanded, selected == RailTab.Download, Icons.Outlined.Download, t["download"], onDownload)
         Spacer(Modifier.weight(1f))
         RailGlyph(
             expanded,
             false,
             if (fullscreen) Icons.Outlined.FullscreenExit else Icons.Outlined.Fullscreen,
-            if (fullscreen) "退出全屏" else "全屏",
+            if (fullscreen) t["exitFullscreen"] else t["fullscreen"],
             onToggleFullscreen,
         )
         RailGlyph(
             expanded,
             false,
             Icons.Outlined.KeyboardDoubleArrowLeft,
-            "隐藏侧栏",
+            t["hideSidebar"],
             onToggleHidden,
         )
-        RailGlyph(expanded, selected == RailTab.Settings, Icons.Outlined.Settings, "设置", onSettings)
-        RailGlyph(expanded, drawerOpen, Icons.Outlined.Menu, "菜单", onOpenDrawer)
+        RailGlyph(expanded, selected == RailTab.Settings, Icons.Outlined.Settings, t["settings"], onSettings)
+        RailGlyph(expanded, drawerOpen, Icons.Outlined.Menu, t["menu"], onOpenDrawer)
     }
 }
 
@@ -1296,6 +1421,24 @@ internal fun SimpleFeedPage(
             .filterNot { graph.settings.current.shouldHide(it) || (hideBookmarked && it.isBookmarked) }
             .let { if (predicate != null) it.filter(predicate) else it }
 
+    fun toggleBookmark(target: Illust) {
+        scope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    if (target.isBookmarked) graph.client.api.removeBookmark(target.id)
+                    else graph.client.api.addBookmark(
+                        target.id,
+                        if (graph.settings.current.privateStar) "private" else "public",
+                    )
+                }
+            }.onSuccess {
+                feed.items = feed.items?.map {
+                    if (it.id == target.id) it.copy(is_bookmarked = !target.isBookmarked) else it
+                }
+            }
+        }
+    }
+
     LaunchedEffect(key, feed.reload) {
         if (feed.items != null) return@LaunchedEffect
         feed.loading = true
@@ -1318,6 +1461,10 @@ internal fun SimpleFeedPage(
         loadingMore = feed.loadingMore,
         columnsOverride = graph.settings.current.lineCount,
         gridKey = gridKey,
+        onToggleBookmark = { toggleBookmark(it) },
+        onAddBatch = { graph.batch.add(it) },
+        onAddFeature = { graph.features.add(it) },
+        onHide = { target -> feed.items = feed.items?.filterNot { it.id == target.id } },
         onRetry = { feed.reset() },
         onLoadMore = {
             val url = feed.next ?: return@IllustWaterfall

@@ -44,17 +44,33 @@ fun FollowingUsersScreen(
     onOpenUser: (Long) -> Unit,
 ) {
     val uid = graph.sessionStore.user?.id ?: return
+    UserListScreen(
+        graph = graph,
+        loader = loader,
+        load = {
+            if (followers) graph.client.api.userFollowers(uid) else graph.client.api.followingUsers(uid)
+        },
+        onOpenUser = onOpenUser,
+        key = "$uid:$followers",
+    )
+}
+
+/** 通用用户列表（任意 load 源：我的关注 / 某用户的关注 / 好P友…）。key 变化时重新加载。 */
+@Composable
+fun UserListScreen(
+    graph: AppGraph,
+    loader: ImageLoader,
+    load: suspend () -> ceui.pixshaft.shared.model.UserPreviewResponse,
+    onOpenUser: (Long) -> Unit,
+    key: Any = Unit,
+) {
     var items by remember { mutableStateOf<List<UserPreview>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(uid, followers) {
+    LaunchedEffect(key) {
         loading = true
-        runCatching {
-            withContext(Dispatchers.IO) {
-                if (followers) graph.client.api.userFollowers(uid) else graph.client.api.followingUsers(uid)
-            }
-        }
-            .onSuccess { items = it.user_previews }
+        runCatching { withContext(Dispatchers.IO) { load() } }
+            .onSuccess { items = it.user_previews; error = null }
             .onFailure { error = it.userMessage() }
         loading = false
     }
@@ -77,6 +93,13 @@ fun FollowingUsersScreen(
                     Column {
                         Text(user.name ?: "user ${user.id}", style = MaterialTheme.typography.titleMedium)
                         Text("@${user.account.orEmpty()}", style = MaterialTheme.typography.bodySmall)
+                        if (!preview.illusts.isNullOrEmpty()) {
+                            Text(
+                                "${preview.illusts!!.size} 作品",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

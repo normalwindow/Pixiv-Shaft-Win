@@ -18,6 +18,10 @@ data class DesktopSettings(
     val useStaggeredLayout: Boolean = true,
     val mainViewR18: Boolean = false,
     val appLanguage: String = "",
+    val appLocale: String = "", // 空=跟随系统；zh / en / ja
+    val readerFit: Int = 0, // 0 适应宽度 1 适应整页
+    val readerRtl: Boolean = false, // 日漫右开：从右往左翻
+    val readerDarkBg: Boolean = true,
     val showNovelCardTags: Boolean = true,
     val showNovelCardTagTranslations: Boolean = false,
     val navigationInitPosition: String = "home",
