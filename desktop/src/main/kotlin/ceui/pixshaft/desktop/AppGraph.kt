@@ -1,5 +1,8 @@
 package ceui.pixshaft.desktop
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import ceui.pixshaft.shared.auth.DesktopOAuth
 import ceui.pixshaft.shared.auth.OAuthException
 import ceui.pixshaft.shared.auth.Pkce
@@ -46,6 +49,10 @@ class AppGraph {
     val feedStore = FeedStore()
     val features = FeatureColumnStore(AppPaths.featureFile, gson)
     val downloaded = DownloadedStore(this)
+
+    /** Bumped on login / account switch so the shell remounts with the new user. */
+    var sessionGeneration by mutableStateOf(0)
+        private set
 
     @Volatile private var loginReturn: LoginReturnChannel? = null
     @Volatile private var loginSession: ChromiumSession? = null
@@ -186,6 +193,16 @@ class AppGraph {
 
     fun logout() {
         sessionStore.clear()
+        sessionGeneration++
+    }
+
+    fun switchAccount(session: StoredSession) {
+        sessionStore.save(session)
+        accounts.upsert(session)
+        client.fanboxCookie = settings.current.fanboxCookie
+        ChromiumHttp.warmAsync()
+        scheduleTokenRenewal()
+        sessionGeneration++
     }
 
     private fun persist(token: TokenResponse) {
@@ -200,6 +217,7 @@ class AppGraph {
         client.fanboxCookie = settings.current.fanboxCookie
         ChromiumHttp.warmAsync()
         scheduleTokenRenewal()
+        sessionGeneration++
     }
 
     /**

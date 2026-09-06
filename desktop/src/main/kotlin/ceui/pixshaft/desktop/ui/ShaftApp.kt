@@ -46,6 +46,7 @@ import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardDoubleArrowLeft
+import androidx.compose.material.icons.outlined.KeyboardDoubleArrowRight
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Menu
@@ -76,6 +77,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -107,6 +109,7 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.clickable
 import ceui.pixshaft.desktop.AppGraph
+import ceui.pixshaft.desktop.WindowChrome
 import ceui.pixshaft.desktop.BatchSelection
 import ceui.pixshaft.desktop.FeatureColumn
 import ceui.pixshaft.desktop.FeedState
@@ -121,7 +124,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ShaftApp(graph: AppGraph, initialUri: String?, windowState: WindowState) {
+fun ShaftApp(
+    graph: AppGraph,
+    initialUri: String?,
+    windowState: WindowState,
+    modifier: Modifier = Modifier.fillMaxSize(),
+) {
     val imagePreview = remember { ImagePreviewHost() }
     val feedZoom = remember { mutableFloatStateOf(1f) }
     ShaftTheme(
@@ -173,7 +181,7 @@ fun ShaftApp(graph: AppGraph, initialUri: String?, windowState: WindowState) {
             LocalAppLocale provides graph.settings.current.appLocale,
             LocalDownloadedIds provides graph.downloaded.ids,
         ) {
-            Surface(Modifier.fillMaxSize()) {
+            Surface(modifier) {
                 if (!loggedIn) {
                     LoginScreen(
                         graph = graph,
@@ -182,17 +190,19 @@ fun ShaftApp(graph: AppGraph, initialUri: String?, windowState: WindowState) {
                         onError = { loginError = it },
                     )
                 } else {
-                    LoggedInShell(
-                        graph = graph,
-                        loader = loader,
-                        windowState = windowState,
-                        pendingDest = pendingDest,
-                        onPendingConsumed = { pendingDest = null },
-                        onLogout = {
-                            graph.logout()
-                            loggedIn = false
-                        },
-                    )
+                    key(graph.sessionGeneration) {
+                        LoggedInShell(
+                            graph = graph,
+                            loader = loader,
+                            windowState = windowState,
+                            pendingDest = pendingDest,
+                            onPendingConsumed = { pendingDest = null },
+                            onLogout = {
+                                graph.logout()
+                                loggedIn = false
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -244,9 +254,7 @@ private fun LoggedInShell(
     }
 
     fun toggleFullscreen() {
-        windowState.placement =
-            if (windowState.placement == WindowPlacement.Fullscreen) WindowPlacement.Floating
-            else WindowPlacement.Fullscreen
+        WindowChrome.toggleFullscreen(windowState)
     }
 
     val splitOn = graph.settings.current.browseLayout == 1
@@ -287,7 +295,7 @@ private fun LoggedInShell(
                         searchOpen -> searchOpen = false
                         drawerOpen -> drawerOpen = false
                         split && paneId != null -> paneId = null
-                        fullscreen -> windowState.placement = WindowPlacement.Floating
+                        fullscreen -> WindowChrome.toggleFullscreen(windowState)
                         else -> pop()
                     }
                     true
@@ -564,10 +572,10 @@ private fun DestContent(
         is Dest.FanboxPost -> FanboxPostScreen(graph, dest.id)
         Dest.Comic -> ComicHomeScreen(graph, loader)
         is Dest.MangaReader -> MangaReaderScreen(graph, dest.id, loader)
-        Dest.Chat -> ChatScreen(graph)
+        Dest.Chat -> ChatScreen(graph, onOpenIllust = openIllustId, onOpenUser = { push(Dest.User(it)) })
         Dest.ReverseSearch -> ReverseSearchScreen()
         Dest.Library -> LibraryScreen(graph, openIllustId)
-        Dest.Queue -> DownloadQueueScreen(graph)
+        Dest.Queue -> DownloadQueueScreen(graph, loader, openIllustId)
         Dest.Ai -> AiLabScreen()
         Dest.Accounts -> AccountsScreen(graph) { }
         is Dest.Artwork -> ArtworkScreen(
@@ -621,13 +629,8 @@ private fun DestContent(
         Dest.Notifications -> StubScreen("通知与公告")
         Dest.Muted -> MutedScreen(graph)
         Dest.EventHistory -> StubScreen("操作记录")
-        Dest.About -> StubScreen(
-            "关于",
-            "PixShaft Windows 是 CeuiLiSA/Pixiv-Shaft 的 fork，不是 Google Play 上的官方 Shaft。原生 Compose 桌面端 · GPL-2。",
-        )
-        Dest.Discovery -> StubScreen("发现")
+        Dest.About -> AboutScreen(graph)
         Dest.LocalNovels -> LocalNovelsScreen(graph)
-        Dest.Plaza -> StubScreen("广场")
         Dest.BulkDebug -> StubScreen("批量下载 Debug")
         Dest.SafTest -> StubScreen("SAF 写入压测", "Windows 无 SAF，此页仅占位。")
         Dest.NetworkTest -> NetworkTestScreen(graph)
@@ -859,10 +862,10 @@ private fun RankingPage(
                 }
                 if (date.isNotBlank()) {
                     FilterChip(selected = true, onClick = { showDatePicker = true }, label = { Text(date) })
-                    TextButton(onClick = { date = "" }) { Text("今日") }
+                    TextButton(onClick = { date = "" }) { Text(tr()["today"]) }
                 } else {
                     Text(
-                        "选日期看历史榜单",
+                        tr()["pickDateHint"],
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1407,12 +1410,28 @@ private fun ShaftRail(
     onOpenDrawer: () -> Unit,
 ) {
     if (hidden) {
-        // 收起到底：8dp 细条，点击恢复
-        Surface(
-            modifier = Modifier.fillMaxHeight().width(8.dp).clickable(onClick = onToggleHidden),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.30f),
-        ) {
-            Box(Modifier.fillMaxSize())
+        // Visible restore tab, inset so maximized DWM overscan cannot clip it.
+        Box(Modifier.fillMaxHeight().width(28.dp).zIndex(12f), contentAlignment = Alignment.CenterStart) {
+            Surface(
+                modifier = Modifier
+                    .padding(start = 4.dp)
+                    .height(88.dp)
+                    .width(22.dp)
+                    .clickable(onClick = onToggleHidden),
+                shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp),
+                color = MaterialTheme.colorScheme.primary,
+                tonalElevation = 3.dp,
+                shadowElevation = 6.dp,
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Icon(
+                        Icons.Outlined.KeyboardDoubleArrowRight,
+                        contentDescription = tr()["restoreSidebar"],
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
         }
     } else {
         // 常驻窄栏：布局占位只有 60dp，图标水平居中；展开态由根 Box 里的浮层负责

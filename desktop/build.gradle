@@ -40,7 +40,7 @@ compose.desktop {
                     org.jetbrains.compose.desktop.application.dsl.TargetFormat.Exe,
             )
             packageName = 'PixShaft-Win'
-            packageVersion = '0.0.3'
+            packageVersion = '0.0.4'
             description = 'Unofficial Pixiv client for Windows (Pixiv-Shaft-Win)'
             vendor = 'Pixiv-Shaft-Win'
             copyright = 'GNU GPL v2. Copyright (C) Pixiv-Shaft contributors.'
@@ -65,7 +65,7 @@ tasks.register('packageReleasePortableZip', Zip) {
     dependsOn tasks.named('createReleaseDistributable')
     group = 'compose desktop'
     description = 'Zip the release app-image with a PixShaft.portable marker.'
-    archiveFileName = 'PixShaft-Win-0.0.3-portable.zip'
+    archiveFileName = 'PixShaft-Win-0.0.4-portable.zip'
     destinationDirectory = layout.buildDirectory.dir('compose/binaries/main-release/zip')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(layout.buildDirectory.dir('compose/binaries/main-release/app/PixShaft-Win')) {
@@ -81,49 +81,38 @@ tasks.register('packageReleasePortableZip', Zip) {
     }
 }
 
-def webAuthPublishDir = file('distribute/windows')
 def webAuthOutDir = layout.buildDirectory.dir('webauth')
 
 tasks.register('publishWebAuthHost', Exec) {
     group = 'compose desktop'
-    description = 'Publish Pixeval-style WebView2 login helper'
+    description = 'Publish Pixeval-style WebView2 login helper as a standalone exe (not packed into the app image).'
     workingDir = file('webview-auth')
     commandLine 'dotnet', 'publish', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'true',
             '/p:PublishSingleFile=true',
             '/p:IncludeNativeLibrariesForSelfExtract=true',
             '-o', webAuthOutDir.get().asFile.absolutePath
-    doLast {
-        webAuthPublishDir.mkdirs()
-        copy {
-            from webAuthOutDir
-            include 'PixShaftWebAuth.exe'
-            into webAuthPublishDir
-        }
+}
+
+tasks.register('packageWebAuthHost', Copy) {
+    dependsOn 'publishWebAuthHost'
+    group = 'compose desktop'
+    description = 'Copy standalone PixShaftWebAuth.exe next to MSI/EXE/zip for separate GitHub upload.'
+    from(webAuthOutDir) {
+        include 'PixShaftWebAuth.exe'
     }
+    into layout.buildDirectory.dir('compose/binaries/main-release/webauth')
 }
 
 afterEvaluate {
     tasks.withType(JavaExec).configureEach {
         if (name == 'run' || name == 'runRelease') {
             dependsOn 'publishWebAuthHost'
-            systemProperty 'pixshaft.webauth', new File(webAuthPublishDir, 'PixShaftWebAuth.exe').absolutePath
+            systemProperty 'pixshaft.webauth', new File(webAuthOutDir.get().asFile, 'PixShaftWebAuth.exe').absolutePath
         }
     }
-    tasks.matching { it.name == 'createReleaseDistributable' || it.name == 'createDistributable' }.configureEach {
-        dependsOn 'publishWebAuthHost'
-        doLast {
-            def release = name.contains('Release')
-            def dest = layout.buildDirectory.dir(
-                    "compose/binaries/${release ? 'main-release' : 'main'}/app/PixShaft-Win"
-            ).get().asFile
-            dest.mkdirs()
-            copy {
-                from new File(webAuthPublishDir, 'PixShaftWebAuth.exe')
-                into dest
-            }
-        }
-    }
+    // Do NOT copy PixShaftWebAuth.exe into the app image / portable root.
+    // It is published as its own release asset and downloaded on demand.
     tasks.matching { it.name == 'packageReleaseDistributionForCurrentOS' }.configureEach {
-        finalizedBy('packageReleasePortableZip')
+        finalizedBy('packageReleasePortableZip', 'packageWebAuthHost')
     }
 }

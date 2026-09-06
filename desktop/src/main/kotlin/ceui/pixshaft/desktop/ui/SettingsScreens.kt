@@ -200,6 +200,7 @@ fun SettingsCategoryScreen(
         Spacer(Modifier.height(16.dp))
         when (key) {
             "account" -> SettingsGroup("Pixiv 账号") {
+                WebAuthHelperPanel()
                 LinkRow("账号管理", "打开多账号页，登录会自动入库") { onOpen(Dest.Accounts) }
                 LinkRow("编辑账号信息与邮箱绑定", "在 Pixiv 网页修改") {
                     openUrl("https://accounts.pixiv.net/account-settings")

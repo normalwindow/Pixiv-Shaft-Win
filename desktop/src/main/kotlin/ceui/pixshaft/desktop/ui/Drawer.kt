@@ -40,6 +40,7 @@ import androidx.compose.material.icons.outlined.Language
 import androidx.compose.material.icons.outlined.MenuBook
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.OfflineBolt
+import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PushPin
@@ -79,60 +80,61 @@ data class DrawerSection(
     val items: List<DrawerItem>,
 )
 
-fun drawerSections(): List<DrawerSection> = listOf(
+fun drawerSections(t: L10n): List<DrawerSection> = listOf(
     DrawerSection(
-        "我的",
+        t["sectionMine"],
         listOf(
-            DrawerItem("我的插画收藏", Dest.Bookmarks, Icons.Outlined.Bookmark),
-            DrawerItem("我的小说收藏", Dest.NovelBookmarks, Icons.Outlined.MenuBook),
-            DrawerItem("稍后再看", Dest.WatchLater, Icons.Outlined.WatchLater),
-            DrawerItem("我置顶的内容", Dest.Pinned, Icons.Outlined.PushPin),
-            DrawerItem("精华列", Dest.Feature, Icons.Outlined.Star),
-            DrawerItem("追更列表", Dest.Watchlist, Icons.Outlined.Timeline),
-            DrawerItem("小说书签", Dest.NovelMarkers, Icons.Outlined.MenuBook),
-            DrawerItem("我的关注", Dest.FollowingUsers, Icons.Outlined.People),
-            DrawerItem("我的粉丝", Dest.Fans, Icons.Outlined.Person),
+            DrawerItem(t["myIllustBookmarks"], Dest.Bookmarks, Icons.Outlined.Bookmark),
+            DrawerItem(t["myNovelBookmarks"], Dest.NovelBookmarks, Icons.Outlined.MenuBook),
+            DrawerItem(t["watchLater"], Dest.WatchLater, Icons.Outlined.WatchLater),
+            DrawerItem(t["pinned"], Dest.Pinned, Icons.Outlined.PushPin),
+            DrawerItem(t["featureColumns"], Dest.Feature, Icons.Outlined.Star),
+            DrawerItem(t["watchlist"], Dest.Watchlist, Icons.Outlined.Timeline),
+            DrawerItem(t["novelMarkers"], Dest.NovelMarkers, Icons.Outlined.MenuBook),
+            DrawerItem(t["myFollowing"], Dest.FollowingUsers, Icons.Outlined.People),
+            DrawerItem(t["myFans"], Dest.Fans, Icons.Outlined.Person),
+            DrawerItem(t["accounts"], Dest.Accounts, Icons.Outlined.SwapHoriz),
         ),
     ),
     DrawerSection(
-        "搜索按热度排序",
+        t["sectionHotSearch"],
         listOf(
-            DrawerItem("使用情况", Dest.Usage, Icons.Outlined.AutoAwesome, badge = "NEW"),
+            DrawerItem(t["usage"], Dest.Usage, Icons.Outlined.AutoAwesome, badge = "NEW"),
         ),
     ),
     DrawerSection(
-        "记录与管理",
+        t["sectionRecords"],
         listOf(
-            DrawerItem("浏览记录", Dest.History, Icons.Outlined.History),
-            DrawerItem("下载管理", Dest.Queue, Icons.Outlined.Download),
-            DrawerItem("离线快照", Dest.Snapshots, Icons.Outlined.OfflineBolt),
-            DrawerItem("通知与公告", Dest.Notifications, Icons.Outlined.Notifications),
-            DrawerItem("屏蔽记录", Dest.Muted, Icons.Outlined.Block),
-            DrawerItem("操作记录", Dest.EventHistory, Icons.Outlined.History),
+            DrawerItem(t["history"], Dest.History, Icons.Outlined.History),
+            DrawerItem(t["downloadQueue"], Dest.Queue, Icons.Outlined.Download),
+            DrawerItem(t["snapshots"], Dest.Snapshots, Icons.Outlined.OfflineBolt),
+            DrawerItem(t["notifications"], Dest.Notifications, Icons.Outlined.Notifications),
+            DrawerItem(t["muted"], Dest.Muted, Icons.Outlined.Block),
+            DrawerItem(t["eventHistory"], Dest.EventHistory, Icons.Outlined.History),
         ),
     ),
     DrawerSection(
-        "其他",
+        t["sectionOther"],
         listOf(
-            DrawerItem("热门标签", Dest.TrendingTags, Icons.Outlined.Whatshot),
-            DrawerItem("设置", Dest.Settings, Icons.Outlined.Settings),
-            DrawerItem("网络测试", Dest.NetworkTest, Icons.Outlined.Wifi),
-            DrawerItem("画质提升", Dest.Ai, Icons.Outlined.AutoAwesome),
-            DrawerItem("以图搜源", Dest.ReverseSearch, Icons.Outlined.ImageSearch),
-            DrawerItem("关于", Dest.About, Icons.Outlined.Info),
+            DrawerItem(t["hotTags"], Dest.TrendingTags, Icons.Outlined.Whatshot),
+            DrawerItem(t["settings"], Dest.Settings, Icons.Outlined.Settings),
+            DrawerItem(t["networkTest"], Dest.NetworkTest, Icons.Outlined.Wifi),
+            DrawerItem(t["aiLab"], Dest.Ai, Icons.Outlined.AutoAwesome),
+            DrawerItem(t["reverseSearch"], Dest.ReverseSearch, Icons.Outlined.ImageSearch),
+            DrawerItem(t["about"], Dest.About, Icons.Outlined.Info),
         ),
     ),
     DrawerSection(
-        "试验性",
+        t["sectionExperimental"],
         listOf(
-            DrawerItem("发现", Dest.Discovery, Icons.Outlined.Explore),
-            DrawerItem("本地小说", Dest.LocalNovels, Icons.Outlined.Storage),
-            DrawerItem("聊天室", Dest.Chat, Icons.Outlined.Chat),
-            DrawerItem("广场", Dest.Plaza, Icons.Outlined.Star),
-            DrawerItem("批量下载 Debug", Dest.BulkDebug, Icons.Outlined.BugReport),
-            DrawerItem("SAF 写入压测", Dest.SafTest, Icons.Outlined.Science),
-            DrawerItem("Web 首页", Dest.WebHome, Icons.Outlined.Language),
-            DrawerItem("pixiv FANBOX", Dest.Fanbox, Icons.Outlined.MenuBook),
+            DrawerItem(t["discovery"], Dest.Discovery, Icons.Outlined.Explore),
+            DrawerItem(t["localNovels"], Dest.LocalNovels, Icons.Outlined.Storage),
+            DrawerItem(t["chat"], Dest.Chat, Icons.Outlined.Chat),
+            DrawerItem(t["plaza"], Dest.Plaza, Icons.Outlined.Star),
+            DrawerItem(t["bulkDebug"], Dest.BulkDebug, Icons.Outlined.BugReport),
+            DrawerItem(t["safTest"], Dest.SafTest, Icons.Outlined.Science),
+            DrawerItem(t["webHome"], Dest.WebHome, Icons.Outlined.Language),
+            DrawerItem(t["fanbox"], Dest.Fanbox, Icons.Outlined.MenuBook),
         ),
     ),
 )
@@ -189,6 +191,18 @@ fun AppDrawer(
                         )
                     }
                     Icon(
+                        Icons.Outlined.PersonAdd,
+                        contentDescription = "添加账号",
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .clickable {
+                                onOpen(Dest.Accounts)
+                                onClose()
+                            }
+                            .padding(6.dp),
+                    )
+                    Icon(
                         Icons.Outlined.SwapHoriz,
                         contentDescription = "切换账号",
                         modifier = Modifier
@@ -201,7 +215,7 @@ fun AppDrawer(
                             .padding(6.dp),
                     )
                 }
-                drawerSections().forEachIndexed { index, section ->
+                drawerSections(tr()).forEachIndexed { index, section ->
                     if (index > 0) {
                         Box(
                             Modifier

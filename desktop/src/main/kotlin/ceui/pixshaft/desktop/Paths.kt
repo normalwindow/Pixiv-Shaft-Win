@@ -39,6 +39,8 @@ object AppPaths {
     val searchHistoryFile: Path get() = root.resolve("search-history.json")
     val featureFile: Path get() = root.resolve("feature-list.json")
     val batchFile: Path get() = root.resolve("batch-list.json")
+    /** Optional HMAC for shaft-api-v2 chat / plaza writes. One line, no quotes. */
+    val hmacFile: Path get() = root.resolve("hmac.key")
 
     fun defaultCache(): Path = root.resolve("cache")
 

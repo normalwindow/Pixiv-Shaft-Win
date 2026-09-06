@@ -105,6 +105,7 @@ object WebAuthHost {
         System.getProperty("pixshaft.webauth")?.let { Path.of(it) }?.takeIf { Files.isRegularFile(it) }?.let { return it }
         val names = listOf("PixShaftWebAuth.exe")
         val dirs = buildList {
+            add(AppPaths.root.resolve("bin"))
             System.getProperty("compose.application.resources.dir")?.let { add(Path.of(it)) }
             runCatching {
                 ProcessHandle.current().info().command().ifPresent { cmd ->
@@ -112,6 +113,7 @@ object WebAuthHost {
                 }
             }
             add(Path.of(System.getProperty("user.dir", ".")))
+            add(Path.of(System.getProperty("user.dir", ".")).resolve("desktop").resolve("build").resolve("webauth"))
             add(Path.of(System.getProperty("user.dir", ".")).resolve("desktop").resolve("distribute").resolve("windows"))
             add(Path.of(System.getProperty("user.dir", ".")).resolve("distribute").resolve("windows"))
         }.filterNotNull()

@@ -99,7 +99,7 @@ class SearchHistoryStore(private val gson: Gson = Gson()) {
 
 /**
  * 聊天室 WebSocket 客户端（shaft-api-v2 协议，见源项目 docs/ws-chat-integration.md）。
- * 握手需要 SHAFT_EVENTS_HMAC；没有密钥时 connect() 直接回报错误，UI 走只读模式。
+ * 握手需要 HMAC；没有密钥时 connect() 直接回报错误，UI 走只读模式。
  */
 class ChatWsClient(
     private val uid: Long,
@@ -109,32 +109,62 @@ class ChatWsClient(
     private val gson = Gson()
     private val http = OkHttpClient.Builder().pingInterval(30, java.util.concurrent.TimeUnit.SECONDS).build()
     private var ws: WebSocket? = null
+    @Volatile var globalSendEnabled: Boolean = true
+        private set
+    @Volatile private var closedByUser = false
+    private val ping = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     fun connect() {
-        val secret = System.getenv("SHAFT_EVENTS_HMAC")
-        if (secret.isNullOrBlank()) {
-            onState("未配置 SHAFT_EVENTS_HMAC，发送已禁用（fork 构建只读）")
+        closedByUser = false
+        if (!ChatProtocol.isSigningReady()) {
+            onState("unsigned")
+            return
+        }
+        if (uid <= 0L) {
+            onState("failed:not-logged-in")
             return
         }
         val ts = System.currentTimeMillis().toString()
-        val sig = ShaftSign.hmac(uid, ts)
+        val sig = ChatProtocol.sign(uid, ts)
         if (sig.isNullOrBlank()) {
-            onState("签名失败")
+            onState("unsigned")
             return
         }
-        val url = "${DesktopClient.CHAT_BASE.removeSuffix("/")}/api/v1/chat/ws?uid=$uid&ts=$ts&sig=$sig&v=1"
+        val base = DesktopClient.CHAT_BASE.removeSuffix("/")
+            .replaceFirst("https://", "wss://")
+            .replaceFirst("http://", "ws://")
+        val url = base + "/api/v1/chat/ws?uid=" + uid + "&ts=" + ts + "&sig=" + sig +
+            "&v=" + AppVersion.CHAT_CLIENT_VERSION
         val request = Request.Builder().url(url).build()
         ws = http.newWebSocket(request, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: okhttp3.Response) {
                 onState("connecting")
+                ping.launch {
+                    while (ws === webSocket && !closedByUser) {
+                        kotlinx.coroutines.delay(25_000)
+                        runCatching { webSocket.send(ChatProtocol.encodePing()) }
+                    }
+                }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val frame = runCatching { gson.fromJson(text, JsonObject::class.java) }.getOrNull() ?: return
                 when (frame.get("kind")?.asString) {
-                    "hello" -> onState("connected")
+                    "hello" -> {
+                        globalSendEnabled = frame.get("global_send_enabled")?.asBoolean ?: true
+                        onState(if (globalSendEnabled) "connected" else "send-disabled")
+                    }
                     "msg" -> onFrame(frame)
-                    "err" -> onState("err:${frame.get("code")?.asString.orEmpty()}")
+                    "err" -> {
+                        val code = frame.get("code")?.asString.orEmpty()
+                        val message = frame.get("message")?.takeUnless { it.isJsonNull }?.asString
+                        onState("err:" + (message ?: code))
+                    }
+                    "global_send_state" -> {
+                        globalSendEnabled = frame.get("enabled")?.asBoolean ?: globalSendEnabled
+                        onState(if (globalSendEnabled) "connected" else "send-disabled")
+                    }
+                    "pong" -> Unit
                 }
             }
 
@@ -143,26 +173,22 @@ class ChatWsClient(
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: okhttp3.Response?) {
-                onState("failed:${t.message.orEmpty()}")
+                onState("failed:" + t.message.orEmpty())
             }
         })
     }
 
-    /** 发送公共房消息；帧格式 {kind:"msg", room:"global", client_msg_id, text}。 */
-    fun sendGlobal(text: String): String? {
+    /** 发送公共房消息，可选引用回复。 */
+    fun sendGlobal(text: String, replyTo: ChatReplyRef? = null, illustId: Long? = null): String? {
         val socket = ws ?: return null
         if (text.isBlank() || text.length > 2048) return null
-        val clientMsgId = UUID.randomUUID().toString()
-        val frame = JsonObject().apply {
-            addProperty("kind", "msg")
-            addProperty("room", "global")
-            addProperty("client_msg_id", clientMsgId)
-            addProperty("text", text)
-        }
-        return if (socket.send(gson.toJson(frame))) clientMsgId else null
+        if (!globalSendEnabled) return null
+        val (id, body) = ChatProtocol.encodeGlobal(text, illustId = illustId, replyTo = replyTo)
+        return if (socket.send(body)) id else null
     }
 
     fun close() {
+        closedByUser = true
         runCatching { ws?.close(1000, null) }
         ws = null
     }

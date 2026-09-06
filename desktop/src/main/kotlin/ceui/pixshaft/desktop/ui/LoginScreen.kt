@@ -33,6 +33,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import ceui.pixshaft.desktop.AppGraph
+import ceui.pixshaft.desktop.WebAuthHost
 import ceui.pixshaft.shared.net.userMessage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -48,6 +49,7 @@ fun LoginScreen(
     var refreshToken by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var webStatus by remember { mutableStateOf("") }
+    var helperReady by remember { mutableStateOf(WebAuthHost.available()) }
     var loginJob by remember { mutableStateOf<Job?>(null) }
     val scope = rememberCoroutineScope()
 
@@ -110,21 +112,23 @@ fun LoginScreen(
             tonalElevation = 2.dp,
             shadowElevation = 8.dp,
         ) {
+            val t = tr()
             Column(Modifier.padding(28.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text("PixShaft", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "Windows 上的 Pixiv 客户端",
+                    t["loginSubtitle"],
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
+                WebAuthHelperPanel(compact = true, onAvailabilityChanged = { helperReady = it })
                 Button(
                     onClick = { startWebLogin() },
-                    enabled = !busy,
+                    enabled = !busy && helperReady,
                     modifier = Modifier.fillMaxWidth().height(48.dp),
                     shape = RoundedCornerShape(14.dp),
                 ) {
-                    Text(if (busy) "登录中…" else "网页登录")
+                    Text(if (busy) t["loginBusy"] else t["loginWeb"])
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedButton(
@@ -132,18 +136,18 @@ fun LoginScreen(
                         modifier = Modifier.weight(1f).height(40.dp),
                         shape = RoundedCornerShape(12.dp),
                     ) {
-                        Text("刷新")
+                        Text(t["loginRetry"])
                     }
                     TextButton(
                         onClick = {
                             abort()
-                            webStatus = "已取消"
+                            webStatus = t["loginCancel"]
                             onError(null)
                         },
                         enabled = busy,
                         modifier = Modifier.width(88.dp),
                     ) {
-                        Text("取消")
+                        Text(t["loginCancel"])
                     }
                 }
                 if (busy || webStatus.isNotBlank()) {
@@ -152,7 +156,7 @@ fun LoginScreen(
                     if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
                 }
                 Text(
-                    "网页登录使用系统 WebView2（与 Pixeval 相同），拦截 pixiv:// 回调。卡住请点刷新。也可粘贴回调或 refresh_token。",
+                    t["loginHint"],
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -161,7 +165,7 @@ fun LoginScreen(
                     value = refreshToken,
                     onValueChange = { refreshToken = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("refresh_token 或回调链接") },
+                    label = { Text(t["loginTokenLabel"]) },
                     minLines = 3,
                     shape = RoundedCornerShape(14.dp),
                     enabled = !busy,
@@ -173,7 +177,7 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth().height(44.dp),
                     shape = RoundedCornerShape(14.dp),
                 ) {
-                    Text("用 token / 回调登录")
+                    Text(t["loginToken"])
                 }
                 if (!error.isNullOrBlank()) {
                     Spacer(Modifier.height(8.dp))

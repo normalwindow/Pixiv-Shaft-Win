@@ -320,6 +320,12 @@ data class ComicWork(
 data class ComicTopData(val banners: List<ComicBanner>? = null, val recent_updated_official_works: List<ComicWork>? = null)
 data class ComicTopResponse(val data: ComicTopData? = null)
 
+data class ChatReplyTo(
+    val uid: Long = 0,
+    val client_msg_id: String? = null,
+    val display_name: String? = null,
+    val text: String? = null,
+)
 data class ChatHistoryItem(
     val id: Long = 0,
     val uid: Long = 0,
@@ -328,6 +334,7 @@ data class ChatHistoryItem(
     val text: String? = null,
     val illust_id: Long? = null,
     val ts: Long = 0,
+    val reply_to: ChatReplyTo? = null,
 )
 data class ChatHistoryResponse(
     val room: String? = null,

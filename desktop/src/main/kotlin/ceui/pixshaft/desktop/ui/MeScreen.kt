@@ -161,7 +161,7 @@ fun MeScreen(
             }
             // 右：分组入口（双列卡片）
             Column(Modifier.weight(0.68f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                drawerSections().forEach { section ->
+                drawerSections(tr()).forEach { section ->
                     Text(
                         section.title,
                         style = MaterialTheme.typography.labelLarge,

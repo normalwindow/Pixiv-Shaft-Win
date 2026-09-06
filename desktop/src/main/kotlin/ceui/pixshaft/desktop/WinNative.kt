@@ -5,7 +5,11 @@ import com.sun.jna.Native
 import com.sun.jna.Pointer
 import com.sun.jna.win32.W32APIOptions
 import java.awt.Frame
+import java.awt.GraphicsEnvironment
+import java.awt.Rectangle
+import java.awt.Toolkit
 import java.awt.Window
+import kotlin.math.abs
 
 /**
  * Windows 原生窗口小工具（JNA，仅在 Windows 生效，其它平台静默忽略）：
@@ -66,46 +70,112 @@ object WinNative {
     /** 标题栏双击：最大化 / 还原。 */
     fun captionDoubleClick(window: Window) = send(window, WM_NCLBUTTONDBLCLK, HTCAPTION)
 
-    /** 无边框窗口边缘缩放（把按下转成原生 HT 缩放消息）。 */
-    fun resize(window: Window, edge: Edge) = send(window, WM_NCLBUTTONDOWN, edge.ht.toLong())
+    /** 无边框窗口边缘缩放（把按下转成原生 HT 缩放消息）。最大化 / 全屏时调用是 no-op。 */
+    fun resize(window: Window, edge: Edge) {
+        val frame = window as? Frame ?: return
+        if (shouldBlockEdgeResize(frame)) return
+        send(window, WM_NCLBUTTONDOWN, edge.ht.toLong())
+    }
 
     enum class Edge(val ht: Int) {
         LEFT(10), RIGHT(11), TOP(12), TOPLEFT(13), TOPRIGHT(14), BOTTOM(15), BOTTOMLEFT(16), BOTTOMRIGHT(17)
     }
 
-    private val savedBounds = java.util.WeakHashMap<Frame, java.awt.Rectangle>()
-
     fun isMaximized(window: Frame): Boolean = isEffectivelyMaximized(window)
 
+    fun isExclusiveFullscreen(window: Window): Boolean =
+        runCatching { window.graphicsConfiguration?.device?.fullScreenWindow === window }.getOrDefault(false)
+
     /**
-     * 真正的最大化 / 贴靠 / 铺满工作区 / 全屏：这些状态下禁止边缘缩放。
-     * 不能只看内部 savedBounds——双击标题栏、Win+↑、拖到顶边都会走系统 MAXIMIZED_BOTH。
+     * 系统最大化、独占全屏、或窗口已经铺满工作区 / 屏幕时禁止边缘缩放。
+     * 半屏贴靠不会命中 [coversDisplay]。
      */
     fun isEffectivelyMaximized(window: Frame): Boolean {
+        if (isExclusiveFullscreen(window)) return true
         if ((window.extendedState and Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH) return true
-        if (savedBounds.containsKey(window)) return true
-        val screen = window.graphicsConfiguration?.bounds
-            ?: java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.defaultConfiguration.bounds
-        val work = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
-        val b = window.bounds
-        fun near(a: java.awt.Rectangle): Boolean =
-            kotlin.math.abs(b.x - a.x) <= 2 &&
-                kotlin.math.abs(b.y - a.y) <= 2 &&
-                kotlin.math.abs(b.width - a.width) <= 6 &&
-                kotlin.math.abs(b.height - a.height) <= 6
-        return near(work) || near(screen)
+        return coversDisplay(window.bounds, workAreaOf(window), screenOf(window))
     }
 
-    fun shouldBlockEdgeResize(window: Frame): Boolean = isEffectivelyMaximized(window)
+    fun shouldBlockEdgeResize(window: Frame): Boolean =
+        isEffectivelyMaximized(window) || (window.extendedState and Frame.ICONIFIED) != 0
 
-    /** 最大化到工作区（不遮挡任务栏）；再点一次还原。优先走系统 MAXIMIZED_BOTH。 */
-    fun toggleMaximize(window: Frame) {
-        if (isEffectivelyMaximized(window)) {
-            window.extendedState = Frame.NORMAL
-            savedBounds.remove(window)?.let { window.bounds = it }
-        } else {
-            savedBounds[window] = window.bounds
-            window.extendedState = window.extendedState or Frame.MAXIMIZED_BOTH
+    /**
+     * Undecorated MAXIMIZED_BOTH on Windows often covers the taskbar. Pin the
+     * frame to the monitor work area so maximize behaves like a normal app.
+     */
+    fun constrainMaximizedToWorkArea(window: Frame) {
+        if (isExclusiveFullscreen(window)) return
+        if ((window.extendedState and Frame.MAXIMIZED_BOTH) != Frame.MAXIMIZED_BOTH) return
+        val work = workAreaOf(window)
+        runCatching { window.maximizedBounds = work }
+        val b = window.bounds
+        val drifted =
+            abs(b.x - work.x) > 2 ||
+                abs(b.y - work.y) > 2 ||
+                abs(b.width - work.width) > 2 ||
+                abs(b.height - work.height) > 2
+        if (drifted) {
+            window.bounds = Rectangle(work.x, work.y, work.width, work.height)
         }
+    }
+
+    /**
+     * Only the ~8px DWM resize border. Taskbar-sized gaps mean the frame covered
+     * the taskbar and must be clamped, not painted as a white strip.
+     */
+    fun overscanInsets(window: Window): java.awt.Insets {
+        val frame = window as? Frame ?: return java.awt.Insets(0, 0, 0, 0)
+        if (isExclusiveFullscreen(window)) return java.awt.Insets(0, 0, 0, 0)
+        if ((frame.extendedState and Frame.MAXIMIZED_BOTH) != Frame.MAXIMIZED_BOTH) {
+            return java.awt.Insets(0, 0, 0, 0)
+        }
+        return WindowChrome.overscan(window.bounds, workAreaOf(window), cap = 12)
+    }
+
+    /** Prefer [WindowChrome.toggleMaximize] so Compose WindowPlacement stays in sync. */
+    fun toggleMaximize(window: Frame) {
+        if (isExclusiveFullscreen(window)) {
+            runCatching { window.graphicsConfiguration?.device?.fullScreenWindow = null }
+        }
+        val iconified = window.extendedState and Frame.ICONIFIED
+        if ((window.extendedState and Frame.MAXIMIZED_BOTH) == Frame.MAXIMIZED_BOTH) {
+            window.extendedState = iconified or Frame.NORMAL
+        } else {
+            window.extendedState = iconified or Frame.MAXIMIZED_BOTH
+        }
+    }
+
+    fun workAreaOf(window: Window): Rectangle {
+        val gc = window.graphicsConfiguration
+        if (gc != null) {
+            val screen = gc.bounds
+            val insets = runCatching { Toolkit.getDefaultToolkit().getScreenInsets(gc) }.getOrNull()
+            if (insets != null) {
+                return Rectangle(
+                    screen.x + insets.left,
+                    screen.y + insets.top,
+                    screen.width - insets.left - insets.right,
+                    screen.height - insets.top - insets.bottom,
+                )
+            }
+        }
+        return GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+    }
+
+    fun screenOf(window: Window): Rectangle =
+        window.graphicsConfiguration?.bounds
+            ?: GraphicsEnvironment.getLocalGraphicsEnvironment().defaultScreenDevice.defaultConfiguration.bounds
+
+    /**
+     * 窗口是否铺满工作区或整块屏幕（允许数像素的 DWM / DPI 误差）。
+     * 半屏贴靠不会命中——宽或高会差出一大截。
+     */
+    fun coversDisplay(bounds: Rectangle, work: Rectangle, screen: Rectangle, slop: Int = 12): Boolean {
+        fun near(a: Rectangle): Boolean =
+            abs(bounds.x - a.x) <= slop &&
+                abs(bounds.y - a.y) <= slop &&
+                abs(bounds.width - a.width) <= slop &&
+                abs(bounds.height - a.height) <= slop
+        return near(work) || near(screen)
     }
 }

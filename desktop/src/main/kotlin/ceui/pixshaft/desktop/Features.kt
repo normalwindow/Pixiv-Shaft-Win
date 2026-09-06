@@ -22,8 +22,6 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.UUID
 import java.util.zip.ZipInputStream
-import javax.crypto.Mac
-import javax.crypto.spec.SecretKeySpec
 import javax.swing.JFileChooser
 import javax.swing.filechooser.FileNameExtensionFilter
 
@@ -36,6 +34,7 @@ data class QueueJob(
     val error: String? = null,
     val finished: Int = 0,
     val total: Int = 0,
+    val thumbUrl: String? = null,
 )
 
 /** downloadUrls 在协作取消时抛出的标记文案。 */
@@ -60,10 +59,13 @@ class DownloadQueue(
             runCatching {
                 gson.fromJson<MutableList<QueueJob>>(Files.readString(AppPaths.queueFile), type)
                     .orEmpty()
-                    .forEach { jobs += it.copy(status = if (it.status == "running") "pending" else it.status) }
+                    .forEach { raw ->
+                        val status = if (raw.status == "running") "pending" else raw.status
+                        jobs += raw.copy(status = status)
+                    }
             }
         }
-        jobs.filter { it.status == "pending" }.forEach { start(it) }
+        jobs.filter { it.status == "pending" }.forEach { start(it, resume = true) }
         graph.settings.onChange { prev, next ->
             if (prev.maxConcurrentDownloads != next.maxConcurrentDownloads) {
                 gate = Semaphore(next.maxConcurrentDownloads.coerceIn(1, 8))
@@ -74,10 +76,18 @@ class DownloadQueue(
     fun enqueue(illust: Illust) {
         val urls = illust.pageUrls()
         if (urls.isEmpty()) return
-        val job = QueueJob(UUID.randomUUID().toString(), illust.id, illust.title ?: "#${illust.id}", urls, "pending")
+        val job = QueueJob(
+            id = UUID.randomUUID().toString(),
+            illustId = illust.id,
+            title = illust.title ?: "#${illust.id}",
+            urls = urls,
+            status = "pending",
+            total = urls.size,
+            thumbUrl = illust.previewUrl(),
+        )
         jobs += job
         persist()
-        start(job)
+        start(job, resume = false)
     }
 
     fun clearFinished() {
@@ -98,7 +108,7 @@ class DownloadQueue(
 
     fun pause(value: Boolean) {
         paused = value
-        if (!value) jobs.filter { it.status == "pending" }.forEach { start(it) }
+        if (!value) jobs.filter { it.status == "pending" }.forEach { start(it, resume = true) }
     }
 
     fun retry(job: QueueJob) {
@@ -106,9 +116,9 @@ class DownloadQueue(
         cancelRequested.remove(job.id)
         val i = jobs.indexOfFirst { it.id == job.id }
         if (i < 0) return
-        jobs[i] = job.copy(status = "pending", error = null, finished = 0)
+        jobs[i] = job.copy(status = "pending", error = null)
         persist()
-        if (!paused) start(jobs[i])
+        if (!paused) start(jobs[i], resume = true)
     }
 
     fun retryAllFailed() {
@@ -122,31 +132,56 @@ class DownloadQueue(
         persist()
     }
 
+    /** Close-time snapshot: running jobs become pending so the next launch resumes them. */
+    @Synchronized
+    fun shutdown() {
+        for (i in jobs.indices) {
+            if (jobs[i].status == "running") jobs[i] = jobs[i].copy(status = "pending")
+        }
+        persist()
+    }
+
+    @Synchronized
     private fun persist() {
         runCatching {
-            Files.createDirectories(AppPaths.queueFile.parent)
-            Files.writeString(AppPaths.queueFile, gson.toJson(jobs.toList()))
+            val file = AppPaths.queueFile
+            Files.createDirectories(file.parent)
+            val snapshot = jobs.toList()
+            val tmp = file.resolveSibling(file.fileName.toString() + ".tmp")
+            Files.writeString(tmp, gson.toJson(snapshot))
+            try {
+                Files.move(
+                    tmp,
+                    file,
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                )
+            } catch (_: java.nio.file.AtomicMoveNotSupportedException) {
+                Files.move(tmp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
         }
     }
 
-    private fun start(job: QueueJob) {
+    private fun start(job: QueueJob, resume: Boolean) {
         if (paused) return
         if (!started.add(job.id)) return
-        scope.launch { gate.withPermit { runJob(job) } }
+        scope.launch { gate.withPermit { runJob(job, resume) } }
     }
 
-    private suspend fun runJob(job: QueueJob) {
+    private suspend fun runJob(job: QueueJob, resume: Boolean) {
         val idx = jobs.indexOfFirst { it.id == job.id }
         if (idx < 0) return
-        jobs[idx] = job.copy(status = "running", finished = 0, total = job.urls.size)
+        val dummy = Illust(id = job.illustId, title = job.title, page_count = job.urls.size)
+        val already = if (resume) countExistingPages(graph, dummy, job.urls) else 0
+        jobs[idx] = job.copy(status = "running", finished = already, total = job.urls.size)
         persist()
         runCatching {
-            val dummy = Illust(id = job.illustId, title = job.title, page_count = job.urls.size)
             downloadUrls(
                 graph,
                 dummy,
                 job.urls,
                 isCancelled = { job.id in cancelRequested },
+                resumeExisting = resume,
                 onProgress = { done, total ->
                     val i = jobs.indexOfFirst { it.id == job.id }
                     if (i >= 0) {
@@ -329,11 +364,17 @@ object AiTools {
 }
 
 object ShaftSign {
-    fun hmac(uid: Long, ts: String): String? {
-        val secret = System.getenv("SHAFT_EVENTS_HMAC") ?: return null
-        val mac = Mac.getInstance("HmacSHA256")
-        mac.init(SecretKeySpec(secret.toByteArray(Charsets.UTF_8), "HmacSHA256"))
-        return mac.doFinal("$uid|$ts".toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
+    fun hmac(uid: Long, ts: String): String? = ChatProtocol.sign(uid, ts)
+}
+
+fun countExistingPages(graph: AppGraph, illust: Illust, urls: List<String>): Int {
+    val settings = graph.settings.current
+    val dir = settings.resolvedIllustDir(illust)
+    if (!Files.isDirectory(dir)) return 0
+    return urls.indices.count { index ->
+        val ext = urls[index].substringAfterLast('.', "jpg").substringBefore('?').ifBlank { "jpg" }
+        val file = dir.resolve(settings.illustFileName(illust, index, ext))
+        Files.exists(file) && Files.size(file) > 32
     }
 }
 
@@ -342,6 +383,7 @@ suspend fun downloadUrls(
     illust: Illust,
     urls: List<String>,
     isCancelled: () -> Boolean = { false },
+    resumeExisting: Boolean = true,
     onProgress: (Int, Int) -> Unit = { _, _ -> },
 ) {
     val settings = graph.settings.current
@@ -350,28 +392,53 @@ suspend fun downloadUrls(
     urls.forEachIndexed { index, url ->
         if (isCancelled()) error(DOWNLOAD_CANCELLED)
         val ext = url.substringAfterLast('.', "jpg").substringBefore('?').ifBlank { "jpg" }
-        var target = dir.resolve(settings.illustFileName(illust, index, ext))
-        if (Files.exists(target)) {
-            when (settings.overwritePolicy) {
-                0 -> {
-                    onProgress(index + 1, urls.size)
-                    return@forEachIndexed
-                }
-                2 -> {
-                    var n = 1
-                    while (Files.exists(target)) {
-                        target = dir.resolve(settings.illustFileName(illust, index, ext).replace(".$ext", "_$n.$ext"))
-                        n++
-                    }
+        var dest = dir.resolve(settings.illustFileName(illust, index, ext))
+        val part = dest.resolveSibling(dest.fileName.toString() + ".part")
+        if (Files.exists(dest) && Files.size(dest) > 32) {
+            val skip = resumeExisting || settings.overwritePolicy == 0
+            if (skip) {
+                onProgress(index + 1, urls.size)
+                return@forEachIndexed
+            }
+            if (settings.overwritePolicy == 2) {
+                var n = 1
+                while (Files.exists(dest)) {
+                    dest = dir.resolve(settings.illustFileName(illust, index, ext).replace(".$ext", "_$n.$ext"))
+                    n++
                 }
             }
         }
-        val request = Request.Builder().url(url).build()
+        var existing = if (Files.exists(part)) Files.size(part) else 0L
+        val request = Request.Builder().url(url).apply {
+            if (existing > 0) header("Range", "bytes=$existing-")
+        }.build()
         graph.imageHttp.newCall(request).execute().use { response ->
             val body = response.body ?: return@use
-            Files.write(target, body.bytes())
+            val append = response.code == 206 && existing > 0
+            if (!append && existing > 0) {
+                runCatching { Files.deleteIfExists(part) }
+                existing = 0
+            }
+            val options = if (append) {
+                arrayOf(
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.WRITE,
+                    java.nio.file.StandardOpenOption.APPEND,
+                )
+            } else {
+                arrayOf(
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.WRITE,
+                    java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
+                )
+            }
+            Files.newOutputStream(part, *options).use { out ->
+                body.byteStream().copyTo(out)
+            }
         }
-        if (settings.silentDownload) runCatching { target.toFile().setLastModified(0L) }
+        if (isCancelled()) error(DOWNLOAD_CANCELLED)
+        Files.move(dest.resolveSibling(dest.fileName.toString() + ".part"), dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        if (settings.silentDownload) runCatching { dest.toFile().setLastModified(0L) }
         onProgress(index + 1, urls.size)
     }
 }

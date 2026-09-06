@@ -335,7 +335,7 @@ object Chromium {
         targets.forEach { killPidTree(it) }
         livePids.clear()
         // ProcessHandle.commandLine() is often empty on Windows; CIM sees the real argv.
-        killByCommandLineMarkers("chromium-login", "chromium-net")
+        killOrphanChromium()
         waitUntilGone(targets, 1_500)
     }
 
@@ -357,27 +357,25 @@ object Chromium {
     }
 
     private fun killByCommandLineMarkers(vararg markers: String) {
-        if (markers.isEmpty()) return
-        if (!isWindows()) {
-            runCatching {
-                ProcessHandle.allProcesses().forEach { handle ->
-                    val cmd = handle.info().commandLine().orElse("") + handle.info().command().orElse("")
-                    if (markers.any { cmd.contains(it) }) runCatching { handle.destroyForcibly() }
-                }
-            }
-            return
-        }
-        val like = markers.joinToString(" -or ") { marker ->
-            "(\$_.CommandLine -like '*${marker.replace("'", "")}*')"
-        }
-        val script =
-            "Get-CimInstance Win32_Process | Where-Object { $like } | " +
-                "ForEach-Object { Stop-Process -Id \$_.ProcessId -Force -ErrorAction SilentlyContinue }"
+        killOrphanChromium(*markers)
+    }
+
+    /**
+     * Kill leftover Chromium helpers without spawning hidden PowerShell.
+     * Hidden powershell.exe on close looks like malware and trips Defender.
+     * Tracked PIDs + JVM descendants already cover processes we launched;
+     * this only matches ProcessHandle command / commandLine when Windows exposes them.
+     */
+    private fun killOrphanChromium(vararg extraMarkers: String) {
+        val markers = if (extraMarkers.isEmpty()) {
+            arrayOf("chromium-login", "chromium-net", "pixshaft-login")
+        } else extraMarkers
         runCatching {
-            val proc = ProcessBuilder("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command", script)
-                .redirectErrorStream(true)
-                .start()
-            if (!proc.waitFor(3, java.util.concurrent.TimeUnit.SECONDS)) proc.destroyForcibly()
+            ProcessHandle.allProcesses().forEach { handle ->
+                if (handle.pid() == ProcessHandle.current().pid()) return@forEach
+                val blob = handle.info().commandLine().orElse("") + " " + handle.info().command().orElse("")
+                if (markers.any { blob.contains(it) }) killPidTree(handle.pid())
+            }
         }
     }
 

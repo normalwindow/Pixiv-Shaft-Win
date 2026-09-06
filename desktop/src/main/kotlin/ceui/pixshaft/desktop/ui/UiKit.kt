@@ -26,6 +26,20 @@ fun copyToClipboard(text: String) {
 }
 
 /**
+ * Convert a pointer-scroll delta into pixels for a chip strip.
+ *
+ * Compose Desktop sometimes reports 1-unit "line" notches and sometimes already-pixel
+ * deltas (high-res / precision touchpads). Line notches of ~1px made the waterfall
+ * filter chips feel almost stuck; boost those aggressively, and still give pixel
+ * deltas a modest multiplier.
+ */
+fun horizontalWheelPixels(deltaX: Float, deltaY: Float): Float {
+    val raw = if (kotlin.math.abs(deltaX) >= kotlin.math.abs(deltaY)) deltaX else deltaY
+    if (raw == 0f) return 0f
+    return if (kotlin.math.abs(raw) <= 4f) raw * 96f else raw * 3.2f
+}
+
+/**
  * 横向 chip 行：内容超出宽度时，鼠标滚轮直接横向滚动（也支持触摸拖动）。
  * 用于排行榜单、搜索筛选等一排小栏。
  */
@@ -44,9 +58,10 @@ fun HorizontalWheelRow(
                     while (true) {
                         val event = awaitPointerEvent()
                         if (event.type == PointerEventType.Scroll) {
-                            val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: 0f
-                            if (delta != 0f) {
-                                scroll.dispatchRawDelta(delta * 1.2f)
+                            val change = event.changes.firstOrNull() ?: continue
+                            val pixels = horizontalWheelPixels(change.scrollDelta.x, change.scrollDelta.y)
+                            if (pixels != 0f) {
+                                scroll.dispatchRawDelta(pixels)
                                 event.changes.forEach { it.consume() }
                             }
                         }

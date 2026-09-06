@@ -426,7 +426,7 @@ fun UgoiraPlayer(graph: AppGraph, illust: Illust, loader: ImageLoader) {
  * 发送依赖 SHAFT_EVENTS_HMAC（与官方包一致）；未配置密钥时只读浏览。
  */
 @Composable
-fun ChatScreen(graph: AppGraph) {
+fun ChatScreen(graph: AppGraph, onOpenIllust: (Long) -> Unit = {}, onOpenUser: (Long) -> Unit = {}) {
     val selfUid = graph.sessionStore.user?.id ?: 0L
     val messages = remember { mutableStateListOf<ChatHistoryItem>() }
     var loading by remember { mutableStateOf(true) }
@@ -435,6 +435,7 @@ fun ChatScreen(graph: AppGraph) {
     var online by remember { mutableStateOf<Int?>(null) }
     var input by remember { mutableStateOf("") }
     var lastError by remember { mutableStateOf<String?>(null) }
+    var replyTo by remember { mutableStateOf<ceui.pixshaft.desktop.ChatReplyRef?>(null) }
     val listState = rememberLazyListState()
     val timeFmt = remember { DateTimeFormatter.ofPattern("HH:mm") }
 
@@ -480,6 +481,16 @@ fun ChatScreen(graph: AppGraph) {
                     text = frame.get("text")?.asString,
                     illust_id = frame.get("illust_id")?.asLong,
                     ts = frame.get("ts")?.asLong ?: System.currentTimeMillis(),
+                    reply_to = ceui.pixshaft.desktop.ChatProtocol.decodeReplyTo(
+                        frame.get("reply_to")?.takeIf { it.isJsonObject }?.asJsonObject
+                    )?.let {
+                        ceui.pixshaft.shared.model.ChatReplyTo(
+                            uid = it.uid,
+                            client_msg_id = it.clientMsgId,
+                            display_name = it.displayName,
+                            text = it.text,
+                        )
+                    },
                 )
                 merge(item)
             },
@@ -505,6 +516,8 @@ fun ChatScreen(graph: AppGraph) {
                     buildString {
                         append(when {
                             status == "connected" -> "已连接"
+                            status == "unsigned" -> "只读（未配置 HMAC）"
+                            status == "send-disabled" -> "公共房已关闭发言"
                             status.startsWith("err:") -> "发送被拒：${status.removePrefix("err:")}"
                             status.startsWith("failed:") -> "连接失败"
                             status.startsWith("closed:") -> "连接关闭"
@@ -548,8 +561,32 @@ fun ChatScreen(graph: AppGraph) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 itemsIndexed(messages, key = { _, m -> m.client_msg_id ?: "server:${m.id}" }) { _, msg ->
-                    ChatBubble(msg, mine = msg.uid == selfUid, timeFmt)
+                    ChatBubble(msg, mine = msg.uid == selfUid, timeFmt, onOpenIllust, onOpenUser, onReply = { m ->
+                        replyTo = ceui.pixshaft.desktop.ChatReplyRef(m.uid, m.client_msg_id.orEmpty(), m.display_name, m.text)
+                    })
                 }
+            }
+        }
+        if (replyTo != null) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "回复 " + (replyTo?.displayName ?: ("uid " + (replyTo?.uid ?: 0))),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        replyTo?.text.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = { replyTo = null }) { Text("取消回复") }
             }
         }
         if (!lastError.isNullOrBlank()) {
@@ -569,7 +606,7 @@ fun ChatScreen(graph: AppGraph) {
                 value = input,
                 onValueChange = { if (it.length <= 2048) input = it },
                 modifier = Modifier.weight(1f),
-                placeholder = { Text(if (status == "connected") "说点什么…" else "只读模式（需要 SHAFT_EVENTS_HMAC 才能发送）") },
+                placeholder = { Text(if (status == "connected") "说点什么…" else "只读模式（hmac.key 或 SHAFT_EVENTS_HMAC）") },
                 maxLines = 3,
                 shape = RoundedCornerShape(14.dp),
             )
@@ -577,12 +614,13 @@ fun ChatScreen(graph: AppGraph) {
                 onClick = {
                     if (input.isBlank()) return@FilledTonalButton
                     val text = input
-                    val sentId = ws.sendGlobal(text)
+                    val sentId = ws.sendGlobal(text, replyTo = replyTo)
                     if (sentId == null) {
                         lastError = "发送失败：WebSocket 未连接"
                     } else {
                         input = ""
                         lastError = null
+                        replyTo = null
                         merge(
                             ChatHistoryItem(
                                 id = -1L,
@@ -607,7 +645,14 @@ fun ChatScreen(graph: AppGraph) {
 }
 
 @Composable
-private fun ChatBubble(msg: ChatHistoryItem, mine: Boolean, timeFmt: DateTimeFormatter) {
+private fun ChatBubble(
+    msg: ChatHistoryItem,
+    mine: Boolean,
+    timeFmt: DateTimeFormatter,
+    onOpenIllust: (Long) -> Unit,
+    onOpenUser: (Long) -> Unit,
+    onReply: (ChatHistoryItem) -> Unit,
+) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
@@ -626,19 +671,54 @@ private fun ChatBubble(msg: ChatHistoryItem, mine: Boolean, timeFmt: DateTimeFor
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 if (!mine) {
                     Text(
-                        msg.display_name ?: "uid ${msg.uid}",
+                        msg.display_name ?: ("uid " + msg.uid),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { onOpenUser(msg.uid) },
                     )
                 }
+                msg.reply_to?.let { quote ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                        modifier = Modifier.padding(bottom = 6.dp).fillMaxWidth(),
+                    ) {
+                        Column(Modifier.padding(8.dp)) {
+                            Text(
+                                quote.display_name ?: ("uid " + quote.uid),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Text(
+                                quote.text.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
                 Text(msg.text.orEmpty(), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    timeFmt.format(Instant.ofEpochMilli(msg.ts).atZone(ZoneId.systemDefault())),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.align(Alignment.End),
-                )
+                val illustId = msg.illust_id
+                if (illustId != null && illustId > 0) {
+                    Text(
+                        "illust #" + illustId,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (mine) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable { onOpenIllust(illustId) }.padding(top = 4.dp),
+                    )
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    TextButton(onClick = { onReply(msg) }, modifier = Modifier.height(28.dp)) {
+                        Text("回复", style = MaterialTheme.typography.labelSmall)
+                    }
+                    Text(
+                        timeFmt.format(Instant.ofEpochMilli(msg.ts).atZone(ZoneId.systemDefault())),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (mine) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -821,12 +901,12 @@ fun LibraryScreen(graph: AppGraph, onOpen: (Long) -> Unit) {
     }
 }
 
-/** 下载管理：筛选分组、进度条、暂停/继续、单任务取消/重试/移除、批量重试、打开文件夹。 */
+/** 下载管理：筛选分组、进度条、暂停/继续、单任务取消/重试/移除、批量重试、打开文件夹。未完成任务会持久化并在下次启动续传。 */
 @Composable
-fun DownloadQueueScreen(graph: AppGraph) {
+fun DownloadQueueScreen(graph: AppGraph, loader: ImageLoader, onOpen: (Long) -> Unit) {
+    val t = tr()
     val queue = graph.queue
     val jobs = queue.jobs
-    val scope = rememberCoroutineScope()
     var filter by remember { mutableStateOf("all") }
     val filtered = when (filter) {
         "running" -> jobs.filter { it.status == "running" }
@@ -842,9 +922,13 @@ fun DownloadQueueScreen(graph: AppGraph) {
     Column(Modifier.fillMaxSize().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("下载管理", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(t["downloadQueue"], style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "$running 进行中 · $pending 等待 · $done 完成 · $failed 失败" + if (queue.paused) " · 已暂停" else "",
+                    running.toString() + " " + t["downloadRunning"] + " · " +
+                        pending + " " + t["downloadPending"] + " · " +
+                        done + " " + t["downloadDone"] + " · " +
+                        failed + " " + t["downloadFailed"] +
+                        if (queue.paused) " · " + t["downloadPaused"] else "",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -852,21 +936,21 @@ fun DownloadQueueScreen(graph: AppGraph) {
             IconButton(onClick = { queue.pause(!queue.paused) }, enabled = jobs.isNotEmpty()) {
                 Icon(
                     if (queue.paused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
-                    contentDescription = if (queue.paused) "继续" else "暂停",
+                    contentDescription = if (queue.paused) t["downloadResume"] else t["downloadPause"],
                 )
             }
-            TextButton(onClick = { queue.retryAllFailed() }, enabled = failed > 0) { Text("全部重试") }
-            TextButton(onClick = { queue.clearFinished() }, enabled = done > 0 || failed > 0) { Text("清除已完成") }
+            TextButton(onClick = { queue.retryAllFailed() }, enabled = failed > 0) { Text(t["downloadRetryAll"]) }
+            TextButton(onClick = { queue.clearFinished() }, enabled = done > 0 || failed > 0) { Text(t["downloadClear"]) }
         }
         HorizontalWheelRow(
             Modifier.fillMaxWidth().padding(vertical = 8.dp),
         ) {
             listOf(
-                "all" to "全部(${jobs.size})",
-                "running" to "进行中($running)",
-                "pending" to "等待($pending)",
-                "done" to "已完成($done)",
-                "error" to "失败($failed)",
+                "all" to (t["all"] + "(" + jobs.size + ")"),
+                "running" to (t["downloadRunning"] + "(" + running + ")"),
+                "pending" to (t["downloadPending"] + "(" + pending + ")"),
+                "done" to (t["downloadDone"] + "(" + done + ")"),
+                "error" to (t["downloadFailed"] + "(" + failed + ")"),
             ).forEach { (value, label) ->
                 FilterChip(
                     selected = filter == value,
@@ -878,9 +962,21 @@ fun DownloadQueueScreen(graph: AppGraph) {
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(filtered, key = { it.id }) { job ->
-                Surface(shape = RoundedCornerShape(12.dp), tonalElevation = 1.dp) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    tonalElevation = 1.dp,
+                    modifier = Modifier.fillMaxWidth().clickable { onOpen(job.illustId) },
+                ) {
                     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
+                            PixivImage(
+                                url = job.thumbUrl,
+                                contentDescription = job.title,
+                                loader = loader,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)),
+                            )
+                            Spacer(Modifier.width(10.dp))
                             val (icon, tint) = when (job.status) {
                                 "running" -> Icons.Outlined.Download to MaterialTheme.colorScheme.primary
                                 "done" -> Icons.Outlined.CheckCircle to Color(0xFF2BB673)
@@ -892,17 +988,17 @@ fun DownloadQueueScreen(graph: AppGraph) {
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(
-                                    "${job.title}  (#${job.illustId})",
+                                    job.title + "  (#" + job.illustId + ")",
                                     style = MaterialTheme.typography.bodyMedium,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
                                 val detail = when (job.status) {
-                                    "pending" -> "等待中" + if (queue.paused) "（已暂停）" else ""
-                                    "running" -> "下载中… ${job.finished}/${job.total}"
-                                    "done" -> "已完成 · ${job.total} 张"
-                                    "canceled" -> "已取消"
-                                    else -> "失败：${job.error.orEmpty()}"
+                                    "pending" -> t["downloadWaiting"] + if (queue.paused) ("（" + t["downloadPaused"] + "）") else ""
+                                    "running" -> t["downloadProgress"] + " " + job.finished + "/" + job.total
+                                    "done" -> t["downloadDone"] + " · " + job.total
+                                    "canceled" -> t["downloadCanceled"]
+                                    else -> t["downloadFailed"] + "：" + job.error.orEmpty()
                                 }
                                 Text(
                                     detail,
@@ -911,7 +1007,7 @@ fun DownloadQueueScreen(graph: AppGraph) {
                                 )
                             }
                             if (job.status == "running" || job.status == "pending") {
-                                TextButton(onClick = { queue.cancel(job) }) { Text("取消") }
+                                TextButton(onClick = { queue.cancel(job) }) { Text(t["downloadCancel"]) }
                             }
                             if (job.status == "done") {
                                 TextButton(onClick = {
@@ -919,15 +1015,15 @@ fun DownloadQueueScreen(graph: AppGraph) {
                                         Illust(id = job.illustId, title = job.title, page_count = job.urls.size),
                                     )
                                     runCatching { Desktop.getDesktop().open(dir.toFile()) }
-                                }) { Text("打开文件夹") }
+                                }) { Text(t["downloadOpenFolder"]) }
                             }
                             if (job.status == "error" || job.status == "canceled") {
-                                TextButton(onClick = { queue.retry(job) }) { Text("重试") }
+                                TextButton(onClick = { queue.retry(job) }) { Text(t["downloadRetry"]) }
                             }
                             IconButton(onClick = { queue.remove(job) }, modifier = Modifier.size(32.dp)) {
                                 Icon(
                                     Icons.Outlined.Close,
-                                    contentDescription = "移除",
+                                    contentDescription = "remove",
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
@@ -943,10 +1039,9 @@ fun DownloadQueueScreen(graph: AppGraph) {
                 }
             }
         }
-        if (jobs.isEmpty()) Text("队列空。作品页点下载会进入队列。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (jobs.isEmpty()) Text(t["downloadEmpty"], color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
 @Composable
 fun AiLabScreen() {
     val scope = rememberCoroutineScope()
@@ -975,28 +1070,87 @@ fun AiLabScreen() {
 
 @Composable
 fun AccountsScreen(graph: AppGraph, onSwitched: () -> Unit) {
+    val t = tr()
     val store = graph.accounts
+    var adding by remember { mutableStateOf(false) }
+    var addError by remember { mutableStateOf<String?>(null) }
+    val currentUid = graph.sessionStore.user?.id
+    if (adding) {
+        Column(Modifier.fillMaxSize()) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = {
+                    graph.cancelLogin()
+                    adding = false
+                }) { Text(t["back"]) }
+                Text(t["addAccount"], style = MaterialTheme.typography.titleMedium)
+            }
+            Text(
+                t["addAccountHint"],
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            LoginScreen(
+                graph = graph,
+                error = addError,
+                onLoggedIn = {
+                    adding = false
+                    onSwitched()
+                },
+                onError = { addError = it },
+            )
+        }
+        return
+    }
     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("多账号", style = MaterialTheme.typography.headlineSmall)
-        Text("当前登录会写入账号列表。点切换会替换本机会话。", style = MaterialTheme.typography.bodySmall)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(t["accounts"], style = MaterialTheme.typography.headlineSmall)
+                Text(t["accountsHint"], style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Button(onClick = {
+                addError = null
+                adding = true
+            }) { Text(t["addAccount"]) }
+        }
         store.accounts.forEach { acc ->
             val uid = acc.user?.id ?: 0L
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(acc.user?.name ?: "user $uid")
-                    Text("@${acc.user?.account.orEmpty()}", style = MaterialTheme.typography.bodySmall)
+            val current = uid != 0L && uid == currentUid
+            Surface(shape = RoundedCornerShape(14.dp), tonalElevation = if (current) 3.dp else 1.dp) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(acc.user?.name ?: ("user " + uid), style = MaterialTheme.typography.titleSmall)
+                            if (current) {
+                                Text(
+                                    t["currentAccount"],
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+                        Text("@" + acc.user?.account.orEmpty(), style = MaterialTheme.typography.bodySmall)
+                    }
+                    Button(
+                        onClick = {
+                            graph.switchAccount(acc)
+                            onSwitched()
+                        },
+                        enabled = !current,
+                    ) { Text(t["switchAccount"]) }
+                    TextButton(onClick = { store.remove(uid) }, enabled = !current) { Text(t["deleteAccount"]) }
                 }
-                Button(onClick = {
-                    graph.sessionStore.save(acc)
-                    onSwitched()
-                }) { Text("切换") }
-                TextButton(onClick = { store.remove(uid) }) { Text("删除") }
             }
         }
-        if (store.accounts.isEmpty()) Text("还没有保存的账号。登录后会自动加入。")
+        if (store.accounts.isEmpty()) Text(t["noAccounts"], color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
-
 /** 探索广场：shaft-plaza-api 的社区帖子流（文本 + 插画/小说/用户引用，可点赞）。 */
 @Composable
 fun PlazaScreen(
