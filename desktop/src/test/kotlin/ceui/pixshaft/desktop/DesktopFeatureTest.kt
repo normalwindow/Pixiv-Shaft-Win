@@ -1,7 +1,9 @@
 package ceui.pixshaft.desktop
 
 import ceui.pixshaft.desktop.ui.L10n
+import ceui.pixshaft.desktop.ui.ShaftMouseButton
 import ceui.pixshaft.desktop.ui.horizontalWheelPixels
+import ceui.pixshaft.desktop.ui.quickToastKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -74,6 +76,73 @@ class DesktopFeatureTest {
         assertEquals("https://example/s.jpg", copy.thumbUrl)
         assertEquals(99L, copy.illustId)
         assertEquals(1, copy.finished)
+    }
+
+    @Test
+    fun queueJobProgressCoversSinglePageDownloads() {
+        // 单图：只有 1 页，光看 finished/total 会一直是 0 然后直接跳到 1（就是那个 bug）
+        val single = QueueJob(
+            id = "1", illustId = 1L, title = "t",
+            urls = listOf("https://example/a.jpg"), status = "running",
+            finished = 0, total = 1, pageBytes = 0L, pageTotal = 500_000L,
+        )
+        assertEquals(0f, single.progress(), 0.0001f)
+        assertEquals(0.5f, single.copy(pageBytes = 250_000L).progress(), 0.0001f)
+        assertEquals(1f, single.copy(pageBytes = 500_000L).progress(), 0.0001f)
+        // 没有 Content-Length 时退回页数进度，不能除以 0
+        assertEquals(0f, single.copy(pageTotal = 0L, pageBytes = 999L).progress(), 0.0001f)
+
+        // 多页：页内字节只占这一页的那一份
+        val multi = QueueJob(
+            id = "2", illustId = 2L, title = "t",
+            urls = List(4) { "https://example/$it.jpg" }, status = "running",
+            finished = 1, total = 4, pageBytes = 50L, pageTotal = 100L,
+        )
+        assertEquals(0.375f, multi.progress(), 0.0001f)
+        assertEquals("1/4 · 50%", multi.progressText())
+    }
+
+    @Test
+    fun queueJobFormatsBytes() {
+        // 已下完 2MiB，正在下第 3 页（512KB / 1MiB）
+        val job = QueueJob(
+            id = "1", illustId = 1L, title = "t",
+            urls = listOf("https://example/a.jpg"), status = "running",
+            error = null, finished = 2, total = 3, thumbUrl = null,
+            pageBytes = 512_000L, pageTotal = 1_048_576L,
+            bytesDone = 2_097_152L, bytesTotal = 2_097_152L + 1_048_576L,
+        )
+        assertEquals(2_097_152L + 512_000L, job.downloadedBytes)
+        // 已知总量 = 三页 Content-Length 之和（含正在下的第 3 页），不能把当前页算两遍
+        assertEquals(3_145_728L, job.knownBytes)
+        assertEquals("2.5MB", ceui.pixshaft.desktop.humanBytes(job.downloadedBytes))
+        assertEquals("3.0MB", ceui.pixshaft.desktop.humanBytes(job.knownBytes))
+        assertEquals("2.5MB / 3.0MB", job.bytesText())
+        // 总量未知（服务器没给 Content-Length）时只报已下载
+        assertEquals("2.5MB", job.copy(bytesTotal = 0L, pageTotal = 0L).bytesText())
+        assertEquals("", job.copy(bytesDone = 0L, pageBytes = 0L, bytesTotal = 0L, pageTotal = 0L).bytesText())
+    }
+
+    @Test
+    fun mouseButtonIndicesMapToSupportedButtons() {
+        assertEquals(ShaftMouseButton.Right, ShaftMouseButton.fromBackIndex(0))
+        assertEquals(ShaftMouseButton.Middle, ShaftMouseButton.fromBackIndex(1))
+        assertEquals(ShaftMouseButton.Back, ShaftMouseButton.fromBackIndex(2))
+        assertEquals(ShaftMouseButton.Forward, ShaftMouseButton.fromBackIndex(3))
+        // 越界 / 老配置一律退回默认值
+        assertEquals(ShaftMouseButton.Right, ShaftMouseButton.fromBackIndex(-1))
+        assertEquals(ShaftMouseButton.Right, ShaftMouseButton.fromBackIndex(99))
+        assertEquals(ShaftMouseButton.Middle, ShaftMouseButton.fromDownloadIndex(0))
+        assertEquals(ShaftMouseButton.Middle, ShaftMouseButton.fromDownloadIndex(7))
+        // 快捷下载不开放右键（右键是卡片上下文菜单）
+        assertTrue(ShaftMouseButton.downloadOptions.none { it == ShaftMouseButton.Right })
+    }
+
+    @Test
+    fun quickToastKeyCarriesIllustId() {
+        val key = quickToastKey(12345L)
+        assertEquals("12345", key.substringBefore('#'))
+        assertTrue(key.contains('#'))
     }
 
     @Test

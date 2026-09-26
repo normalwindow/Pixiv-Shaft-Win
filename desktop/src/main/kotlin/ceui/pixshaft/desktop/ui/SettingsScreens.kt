@@ -299,6 +299,43 @@ fun SettingsCategoryScreen(
                         set(s.copy(showNovelCardTagTranslations = it))
                     }
                 }
+                SettingsGroup("鼠标") {
+                    ToggleRow(
+                        "详情页右键返回",
+                        "在插画详情页按鼠标右键回到上一页；鼠标停在评论输入框上时让位给右键粘贴。",
+                        s.backOnRightClick,
+                    ) {
+                        set(s.copy(backOnRightClick = it))
+                    }
+                    if (s.backOnRightClick) {
+                        ChoiceRow(
+                            "返回按键",
+                            listOf("右键", "中键", "后侧键", "前侧键"),
+                            s.backMouseButton.coerceIn(0, 3),
+                        ) {
+                            set(s.copy(backMouseButton = it))
+                        }
+                    }
+                    ToggleRow(
+                        "瀑布流快捷下载",
+                        "在瀑布流卡片上按一下鼠标中键（默认）直接加入下载队列，不打开详情。",
+                        s.middleClickDownload,
+                    ) {
+                        set(s.copy(middleClickDownload = it))
+                    }
+                    if (s.middleClickDownload) {
+                        ChoiceRow(
+                            "快捷下载按键",
+                            listOf("中键", "后侧键", "前侧键"),
+                            s.downloadMouseButton.coerceIn(0, 2),
+                        ) {
+                            set(s.copy(downloadMouseButton = it))
+                        }
+                        ToggleRow("显示下载提示", "右下角弹一条简易提示，带进度和结果", s.quickDownloadToast) {
+                            set(s.copy(quickDownloadToast = it))
+                        }
+                    }
+                }
             }
             "browsing" -> SettingsGroup("过滤与搜索") {
                 ToggleRow("冷启动自动刷新首页推荐", "", s.autoRefreshHomeFeed) { set(s.copy(autoRefreshHomeFeed = it)) }

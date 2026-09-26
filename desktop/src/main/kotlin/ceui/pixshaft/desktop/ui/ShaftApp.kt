@@ -86,6 +86,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -100,6 +101,8 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -119,8 +122,10 @@ import ceui.pixshaft.shared.model.Novel
 import ceui.pixshaft.shared.net.userMessage
 import coil3.ImageLoader
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.roundToInt
 
 @Composable
 fun ShaftApp(
@@ -132,6 +137,8 @@ fun ShaftApp(
 ) {
     val imagePreview = remember { ImagePreviewHost() }
     val feedZoom = remember { mutableFloatStateOf(1f) }
+    val quickToast = remember { QuickToastHostState() }
+    val textInputHovered = remember { mutableStateOf(false) }
     ShaftTheme(
         themeMode = graph.settings.current.themeMode,
         accentIndex = graph.settings.current.accentColor,
@@ -180,6 +187,8 @@ fun ShaftApp(
             LocalFeedZoom provides feedZoom,
             LocalAppLocale provides graph.settings.current.appLocale,
             LocalDownloadedIds provides graph.downloaded.ids,
+            LocalQuickToast provides quickToast,
+            LocalTextInputHovered provides textInputHovered,
         ) {
             Surface(modifier) {
                 if (!loggedIn) {
@@ -237,6 +246,7 @@ private fun LoggedInShell(
     // 侧栏 hover 捕获源。读取全部下沉到 ShaftRail / RailOverlay 内部：
     // hover 变化只重组侧栏组件，不会带着整个页面（瀑布流）一起重组 —— 修复内容闪烁。
     val railSlotHover = remember { MutableInteractionSource() }
+    val railHideHover = remember { MutableInteractionSource() }
     val railWideHover = remember { MutableInteractionSource() }
 
     fun push(dest: Dest) {
@@ -277,6 +287,43 @@ private fun LoggedInShell(
 
     LaunchedEffect(searchOpen) {
         if (searchOpen) runCatching { searchFocus.requestFocus() }
+    }
+
+    // 快捷下载的 pop 一路跟到结果：下载完 / 失败时把那条提示就地改掉。
+    val quickToast = LocalQuickToast.current
+    DisposableEffect(graph) {
+        graph.queue.onJobSettled = { illustId, ok, error ->
+            if (graph.settings.current.quickDownloadToast) {
+                quickToast.updateFor(illustId) { toast ->
+                    if (ok) {
+                        toast.copy(title = toast.title, detail = "下载完成", icon = QuickToastIcon.Done)
+                    } else {
+                        toast.copy(detail = "下载失败：" + (error ?: "未知错误"), icon = QuickToastIcon.Remove)
+                    }
+                }
+            }
+        }
+        onDispose { graph.queue.onJobSettled = null }
+    }
+    // 下载进行中时把进度写进 pop：用 snapshotFlow 只在队列状态真的变了才重组。
+    // 别写成 `while (true) { withFrameNanos {} }` —— 那是每帧一次的热循环，会把 UI 线程跑满。
+    LaunchedEffect(graph) {
+        snapshotFlow {
+            val shown = quickToast.current ?: return@snapshotFlow null
+            val id = shown.key.substringBefore('#').toLongOrNull() ?: return@snapshotFlow null
+            val job = graph.queue.jobs.firstOrNull { it.illustId == id && it.status == "running" }
+                ?: return@snapshotFlow null
+            val pct = (job.progress() * 100f).roundToInt()
+            val bytes = job.bytesText()
+            if (bytes.isBlank()) "下载中 $pct%" else "下载中 $pct% · $bytes"
+        }.collect { detail ->
+            val shown = quickToast.current ?: return@collect
+            if (detail != null && shown.icon == QuickToastIcon.Download && detail != shown.detail) {
+                quickToast.updateFor(shown.key.substringBefore('#').toLongOrNull() ?: return@collect) {
+                    it.copy(detail = detail)
+                }
+            }
+        }
     }
 
     Box(
@@ -326,6 +373,9 @@ private fun LoggedInShell(
                     }
                 },
         ) {
+        // 侧栏槽位：ShaftRail 定布局宽度，RailOverlay 从同一个左上角盖出来（不占布局）。
+        // 两者放同一个 Box，浮层的 hover 判定才和窄栏严丝合缝，不会有「斜着移过去就掉」的死区。
+        Box(Modifier.fillMaxHeight().width(if (railHidden) 14.dp else 60.dp)) {
             ShaftRail(
                 hidden = railHidden,
                 selected = current.railTab(),
@@ -333,6 +383,7 @@ private fun LoggedInShell(
                 canGoBack = backStack.size > 1,
                 fullscreen = fullscreen,
                 slotHover = railSlotHover,
+                hideHover = railHideHover,
                 onToggleHidden = { railHidden = !railHidden },
                 onBack = { pop() },
                 onHome = { selectTab(Dest.Home) },
@@ -345,6 +396,28 @@ private fun LoggedInShell(
                 onToggleFullscreen = { toggleFullscreen() },
                 onOpenDrawer = { drawerOpen = true },
             )
+            RailOverlay(
+                hidden = railHidden,
+                selected = current.railTab(),
+                drawerOpen = drawerOpen,
+                canGoBack = backStack.size > 1,
+                fullscreen = fullscreen,
+                slotHover = railSlotHover,
+                hideHover = railHideHover,
+                wideHover = railWideHover,
+                onToggleHidden = { railHidden = !railHidden },
+                onBack = { pop() },
+                onHome = { selectTab(Dest.Home) },
+                onRanking = { selectTab(Dest.Ranking) },
+                onFollowing = { selectTab(Dest.Following) },
+                onSearch = { searchOpen = true },
+                onMe = { selectTab(Dest.Me) },
+                onDownload = { selectTab(Dest.Queue) },
+                onSettings = { selectTab(Dest.Settings) },
+                onToggleFullscreen = { toggleFullscreen() },
+                onOpenDrawer = { drawerOpen = true },
+            )
+        }
             Column(Modifier.weight(1f).fillMaxHeight()) {
                 CompositionLocalProvider(LocalBrowseChrome provides BrowseChrome(paneId, split)) {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
@@ -356,12 +429,13 @@ private fun LoggedInShell(
                         modifier = Modifier.fillMaxSize(),
                     ) { page ->
                         val keepAlive = page.keepAliveKey()
+                        val back: () -> Unit = { pop() }
                         if (keepAlive != null) {
                             pageStates.SaveableStateProvider(keepAlive) {
-                                DestContent(page, graph, loader, snackbar, ::push, ::openIllust, ::openIllustId, onLogout)
+                                DestContent(page, graph, loader, snackbar, ::push, ::openIllust, ::openIllustId, onLogout, back)
                             }
                         } else {
-                            DestContent(page, graph, loader, snackbar, ::push, ::openIllust, ::openIllustId, onLogout)
+                            DestContent(page, graph, loader, snackbar, ::push, ::openIllust, ::openIllustId, onLogout, back)
                         }
                     }
                 }
@@ -414,26 +488,6 @@ private fun LoggedInShell(
                 SnackbarHost(snackbar, modifier = Modifier.fillMaxWidth())
             }
         }
-        RailOverlay(
-            hidden = railHidden,
-            selected = current.railTab(),
-            drawerOpen = drawerOpen,
-            canGoBack = backStack.size > 1,
-            fullscreen = fullscreen,
-            slotHover = railSlotHover,
-            wideHover = railWideHover,
-            onToggleHidden = { railHidden = !railHidden },
-            onBack = { pop() },
-            onHome = { selectTab(Dest.Home) },
-            onRanking = { selectTab(Dest.Ranking) },
-            onFollowing = { selectTab(Dest.Following) },
-            onSearch = { searchOpen = true },
-            onMe = { selectTab(Dest.Me) },
-            onDownload = { selectTab(Dest.Queue) },
-            onSettings = { selectTab(Dest.Settings) },
-            onToggleFullscreen = { toggleFullscreen() },
-            onOpenDrawer = { drawerOpen = true },
-        )
         AnimatedVisibility(
             visible = searchOpen,
             enter = fadeIn(),
@@ -474,6 +528,12 @@ private fun LoggedInShell(
             onClose = { drawerOpen = false },
             onOpen = { push(it) },
         )
+        // 快捷下载的简易 pop
+        QuickToastHost(
+            state = LocalQuickToast.current,
+            loader = loader,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 14.dp).zIndex(40f),
+        )
         preview.request?.let { req ->
             Box(Modifier.fillMaxSize().zIndex(30f)) {
                 ImagePreviewOverlay(req, loader, onClose = { preview.close() })
@@ -492,6 +552,7 @@ private fun DestContent(
     openIllust: (Illust) -> Unit,
     openIllustId: (Long) -> Unit,
     onLogout: () -> Unit,
+    onBack: () -> Unit = {},
 ) {
     when (dest) {
         Dest.Home -> HomePage(
@@ -590,6 +651,7 @@ private fun DestContent(
             onOpenIllust = { push(Dest.Artwork(it)) },
             onOpenManga = { push(Dest.MangaReader(it)) },
             onOpenRelated = { push(Dest.Related(it)) },
+            onBack = onBack,
         )
         is Dest.Related -> RelatedPage(graph, loader, dest.id, openIllust)
         Dest.TrendingTags -> TrendingTagsPage(graph, loader, onOpen = openIllust, onTag = { push(Dest.Search(it)) })
@@ -1399,6 +1461,7 @@ private fun ShaftRail(
     canGoBack: Boolean,
     fullscreen: Boolean,
     slotHover: MutableInteractionSource,
+    hideHover: MutableInteractionSource,
     onToggleHidden: () -> Unit,
     onBack: () -> Unit,
     onHome: () -> Unit,
@@ -1412,27 +1475,28 @@ private fun ShaftRail(
     onOpenDrawer: () -> Unit,
 ) {
     if (hidden) {
-        // Visible restore tab, inset so maximized DWM overscan cannot clip it.
-        Box(Modifier.fillMaxHeight().width(28.dp).zIndex(12f), contentAlignment = Alignment.CenterStart) {
+        // 隐藏态 = 旧版那条「单细长条」：整条高度一根强调色细条。
+        // 交互有两条路：
+        //   1) 悬停 —— 鼠标停上去 120ms 后由 RailOverlay 弹出完整浮层（不用先点开）；
+        //   2) 点击 —— 直接把侧栏恢复成常驻窄栏。
+        // 细条只有 8dp，命中区放宽到 14dp，免得 1px 的误差让人以为点坏了。
+        Box(
+            Modifier
+                .fillMaxHeight()
+                .width(14.dp)
+                .zIndex(12f)
+                .hoverable(hideHover)
+                .clickable(onClick = onToggleHidden),
+            contentAlignment = Alignment.CenterStart,
+        ) {
             Surface(
                 modifier = Modifier
-                    .padding(start = 4.dp)
-                    .height(88.dp)
-                    .width(22.dp)
-                    .clickable(onClick = onToggleHidden),
-                shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp),
-                color = MaterialTheme.colorScheme.primary,
-                tonalElevation = 3.dp,
-                shadowElevation = 6.dp,
+                    .fillMaxHeight()
+                    .width(8.dp),
+                shape = RoundedCornerShape(topEnd = 6.dp, bottomEnd = 6.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.42f),
             ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.Outlined.KeyboardDoubleArrowRight,
-                        contentDescription = tr()["restoreSidebar"],
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
+                Box(Modifier.fillMaxSize())
             }
         }
     } else {
@@ -1444,6 +1508,7 @@ private fun ShaftRail(
             tonalElevation = 1.dp,
         ) {
             RailItems(
+                modifier = Modifier.fillMaxHeight(),
                 expanded = false,
                 selected = selected,
                 drawerOpen = drawerOpen,
@@ -1465,9 +1530,67 @@ private fun ShaftRail(
     }
 }
 
+/** 浮层里的侧栏面板：宽 [RAIL_PANEL_WIDTH]，圆角 + 阴影。 */
+@Composable
+private fun RailSidePanel(
+    modifier: Modifier = Modifier.fillMaxHeight(),
+    selected: RailTab,
+    drawerOpen: Boolean,
+    canGoBack: Boolean,
+    fullscreen: Boolean,
+    onBack: () -> Unit,
+    onHome: () -> Unit,
+    onRanking: () -> Unit,
+    onFollowing: () -> Unit,
+    onSearch: () -> Unit,
+    onMe: () -> Unit,
+    onDownload: () -> Unit,
+    onSettings: () -> Unit,
+    onToggleFullscreen: () -> Unit,
+    onToggleHidden: () -> Unit,
+    onOpenDrawer: () -> Unit,
+) {
+    Surface(
+        modifier = modifier.width(RAIL_PANEL_WIDTH),
+        shape = RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        shadowElevation = 10.dp,
+    ) {
+        RailItems(
+            modifier = Modifier.fillMaxHeight(),
+            expanded = true,
+            selected = selected,
+            drawerOpen = drawerOpen,
+            canGoBack = canGoBack,
+            fullscreen = fullscreen,
+            onBack = onBack,
+            onHome = onHome,
+            onRanking = onRanking,
+            onFollowing = onFollowing,
+            onSearch = onSearch,
+            onMe = onMe,
+            onDownload = onDownload,
+            onSettings = onSettings,
+            onToggleFullscreen = onToggleFullscreen,
+            onToggleHidden = onToggleHidden,
+            onOpenDrawer = onOpenDrawer,
+        )
+    }
+}
+
+private val RAIL_PANEL_WIDTH = 196.dp
+
+/** 悬停展开 / 收起的延迟：太短会在窄栏上误触，太长又会显得迟钝。 */
+private const val RAIL_HOVER_OPEN_MS = 120L
+private const val RAIL_HOVER_CLOSE_MS = 180L
+
 /**
- * 展开态侧栏浮层：固定 196dp，盖在内容上、不占布局。
+ * 展开态侧栏浮层：固定 [RAIL_PANEL_WIDTH]，盖在内容上、不占布局。
  * hover 状态在本组件内部读取 —— 重组只发生在这里，不影响页面内容。
+ *
+ * 侧栏被隐藏时，浮层仍然生效：鼠标停在那根细长条上就展开（收走后靠 180ms 延迟
+ * 兜住「从细条移进浮层」这一小段空隙），所以隐藏态并不等于功能全没了。
  */
 @Composable
 private fun RailOverlay(
@@ -1477,6 +1600,7 @@ private fun RailOverlay(
     canGoBack: Boolean,
     fullscreen: Boolean,
     slotHover: MutableInteractionSource,
+    hideHover: MutableInteractionSource,
     wideHover: MutableInteractionSource,
     onToggleHidden: () -> Unit,
     onBack: () -> Unit,
@@ -1491,51 +1615,56 @@ private fun RailOverlay(
     onOpenDrawer: () -> Unit,
 ) {
     val slotHovered by slotHover.collectIsHoveredAsState()
+    val hideHovered by hideHover.collectIsHoveredAsState()
     val wideHovered by wideHover.collectIsHoveredAsState()
-    val expanded = !hidden && (slotHovered || wideHovered)
+
+    var expanded by remember { mutableStateOf(false) }
+    LaunchedEffect(slotHovered, hideHovered, wideHovered, hidden) {
+        val wanted = if (hidden) hideHovered else slotHovered
+        if (wanted || wideHovered) {
+            delay(RAIL_HOVER_OPEN_MS)
+            expanded = true
+        } else {
+            delay(RAIL_HOVER_CLOSE_MS)
+            expanded = false
+        }
+    }
+    // 点「隐藏侧栏」之后不要让浮层跟着一起弹回来
+    LaunchedEffect(hidden) {
+        if (hidden) {
+            delay(RAIL_HOVER_CLOSE_MS)
+            expanded = false
+        }
+    }
     AnimatedVisibility(
         visible = expanded,
         enter = fadeIn(tween(110)),
         exit = fadeOut(tween(110)),
     ) {
-        Box(
-            Modifier
-                .fillMaxHeight()
-                .width(196.dp)
-                .hoverable(wideHover),
-        ) {
-            Surface(
-                modifier = Modifier.fillMaxHeight().width(196.dp),
-                shape = RoundedCornerShape(topEnd = 18.dp, bottomEnd = 18.dp),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 1.dp,
-                shadowElevation = 10.dp,
-            ) {
-                RailItems(
-                    expanded = true,
-                    selected = selected,
-                    drawerOpen = drawerOpen,
-                    canGoBack = canGoBack,
-                    fullscreen = fullscreen,
-                    onBack = onBack,
-                    onHome = onHome,
-                    onRanking = onRanking,
-                    onFollowing = onFollowing,
-                    onSearch = onSearch,
-                    onMe = onMe,
-                    onDownload = onDownload,
-                    onSettings = onSettings,
-                    onToggleFullscreen = onToggleFullscreen,
-                    onToggleHidden = onToggleHidden,
-                    onOpenDrawer = onOpenDrawer,
-                )
-            }
-        }
+        RailSidePanel(
+            modifier = Modifier.fillMaxHeight().hoverable(wideHover),
+            selected = selected,
+            drawerOpen = drawerOpen,
+            canGoBack = canGoBack,
+            fullscreen = fullscreen,
+            onBack = onBack,
+            onHome = onHome,
+            onRanking = onRanking,
+            onFollowing = onFollowing,
+            onSearch = onSearch,
+            onMe = onMe,
+            onDownload = onDownload,
+            onSettings = onSettings,
+            onToggleFullscreen = onToggleFullscreen,
+            onToggleHidden = onToggleHidden,
+            onOpenDrawer = onOpenDrawer,
+        )
     }
 }
 
 @Composable
 private fun RailItems(
+    modifier: Modifier = Modifier.fillMaxHeight(),
     expanded: Boolean,
     selected: RailTab,
     drawerOpen: Boolean,
@@ -1555,7 +1684,7 @@ private fun RailItems(
 ) {
     val t = tr()
     Column(
-        Modifier.fillMaxHeight().padding(vertical = 10.dp, horizontal = 8.dp),
+        modifier.padding(vertical = 10.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.Start,
     ) {
         RailGlyph(

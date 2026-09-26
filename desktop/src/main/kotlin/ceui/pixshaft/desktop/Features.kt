@@ -35,7 +35,61 @@ data class QueueJob(
     val finished: Int = 0,
     val total: Int = 0,
     val thumbUrl: String? = null,
-)
+    /** 当前这一页已经落盘的字节数。 */
+    val pageBytes: Long = 0L,
+    /** 当前这一页的总字节数；HTTP 没给 Content-Length 时是 0。 */
+    val pageTotal: Long = 0L,
+    /** 已经下完的页面的字节之和（用来算总速率）。 */
+    val bytesDone: Long = 0L,
+    val bytesTotal: Long = 0L,
+) {
+    /**
+     * 0f..1f。页数 + 页内字节双重进度：单图作品只有 1 页，
+     * 光看 [finished]/[total] 会一直是 0 然后直接跳到 1（进度条等于没有），
+     * 所以当前页按已下载字节再切一刀。
+     */
+    fun progress(): Float {
+        if (total <= 0) return 0f
+        val pageFraction = if (pageTotal > 0L) {
+            (pageBytes.toDouble() / pageTotal.toDouble()).coerceIn(0.0, 1.0).toFloat()
+        } else {
+            0f
+        }
+        val done = (finished + pageFraction).coerceIn(0f, total.toFloat())
+        return (done / total.toFloat()).coerceIn(0f, 1f)
+    }
+
+    val downloadedBytes: Long get() = bytesDone + pageBytes
+
+    /**
+     * 本次任务已知的总字节数。[bytesTotal] 在每页开工时就把 Content-Length 累进去了
+     * （含正在下的这一页），所以这里**不能再加一次 [pageTotal]**，否则当前页会被算两遍。
+     */
+    val knownBytes: Long get() = bytesTotal
+
+    /** 下载管理页显示的进行中文案：多页看页数，页内再看字节。 */
+    fun progressText(): String {
+        if (total <= 0) return ""
+        val base = "$finished/$total"
+        if (pageTotal <= 0L) return base
+        val percent = (pageBytes * 100.0 / pageTotal.toDouble()).toInt().coerceIn(0, 100)
+        return "$base · ${percent}%"
+    }
+
+    fun bytesText(): String {
+        val done = downloadedBytes
+        if (done <= 0L) return ""
+        val known = knownBytes
+        return if (known > 0L) "${humanBytes(done)} / ${humanBytes(known)}" else humanBytes(done)
+    }
+}
+
+fun humanBytes(n: Long): String = when {
+    n < 1024L -> "${n}B"
+    n < 1024L * 1024L -> "${n / 1024L}KB"
+    n < 1024L * 1024L * 1024L -> String.format("%.1fMB", n / 1024.0 / 1024.0)
+    else -> String.format("%.2fGB", n / 1024.0 / 1024.0 / 1024.0)
+}
 
 /** downloadUrls 在协作取消时抛出的标记文案。 */
 const val DOWNLOAD_CANCELLED = "已取消"
@@ -89,6 +143,9 @@ class DownloadQueue(
         persist()
         start(job, resume = false)
     }
+
+    /** 「已加入下载队列」之后，谁在监听这个作品的结果 —— 给快捷下载的 pop 提示用。 */
+    var onJobSettled: ((Long, Boolean, String?) -> Unit)? = null
 
     fun clearFinished() {
         jobs.removeAll { it.status == "done" || it.status == "error" || it.status == "canceled" }
@@ -173,7 +230,15 @@ class DownloadQueue(
         if (idx < 0) return
         val dummy = Illust(id = job.illustId, title = job.title, page_count = job.urls.size)
         val already = if (resume) countExistingPages(graph, dummy, job.urls) else 0
-        jobs[idx] = job.copy(status = "running", finished = already, total = job.urls.size)
+        jobs[idx] = job.copy(
+            status = "running",
+            finished = already,
+            total = job.urls.size,
+            pageBytes = 0L,
+            pageTotal = 0L,
+            bytesDone = 0L,
+            bytesTotal = 0L,
+        )
         persist()
         runCatching {
             downloadUrls(
@@ -185,7 +250,38 @@ class DownloadQueue(
                 onProgress = { done, total ->
                     val i = jobs.indexOfFirst { it.id == job.id }
                     if (i >= 0) {
-                        jobs[i] = jobs[i].copy(finished = done, total = total)
+                        // 一页下完：页内计数清零，字节并进总量
+                        jobs[i] = jobs[i].copy(
+                            finished = done,
+                            total = total,
+                            pageBytes = 0L,
+                            pageTotal = 0L,
+                            bytesDone = jobs[i].bytesDone + jobs[i].pageTotal,
+                        )
+                        persist()
+                    }
+                },
+                onFileSize = { _, expected ->
+                    val i = jobs.indexOfFirst { it.id == job.id }
+                    if (i >= 0) {
+                        val size = expected.coerceAtLeast(0L)
+                        // 新的一页开始：页内进度归零，页大小按 Content-Length 记下，
+                        // 顺手把它累进「本次任务总字节」——先下完的页在进度条上就不会白占比例。
+                        jobs[i] = jobs[i].copy(
+                            pageBytes = 0L,
+                            pageTotal = size,
+                            bytesTotal = jobs[i].bytesTotal + size,
+                        )
+                        persist()
+                    }
+                },
+                onPageBytes = { _, written, expected ->
+                    val i = jobs.indexOfFirst { it.id == job.id }
+                    if (i >= 0) {
+                        jobs[i] = jobs[i].copy(
+                            pageBytes = written,
+                            pageTotal = if (expected > 0L) expected else jobs[i].pageTotal,
+                        )
                         persist()
                     }
                 },
@@ -193,7 +289,16 @@ class DownloadQueue(
         }.onSuccess {
             graph.downloaded.mark(job.illustId)
             val i = jobs.indexOfFirst { it.id == job.id }
-            if (i >= 0) jobs[i] = jobs[i].copy(status = "done", finished = job.urls.size, total = job.urls.size)
+            if (i >= 0) {
+                jobs[i] = jobs[i].copy(
+                    status = "done",
+                    finished = job.urls.size,
+                    total = job.urls.size,
+                    pageBytes = 0L,
+                    pageTotal = 0L,
+                )
+            }
+            runCatching { onJobSettled?.invoke(job.illustId, true, null) }
             if (graph.settings.current.autoPostLikeWhenDownload) {
                 runCatching {
                     graph.client.api.addBookmark(
@@ -204,13 +309,15 @@ class DownloadQueue(
             }
         }.onFailure { err ->
             val i = jobs.indexOfFirst { it.id == job.id }
+            val canceled = err.message == DOWNLOAD_CANCELLED
             if (i >= 0) {
-                if (err.message == DOWNLOAD_CANCELLED) {
+                if (canceled) {
                     jobs[i] = jobs[i].copy(status = "canceled", error = null)
                 } else {
                     jobs[i] = jobs[i].copy(status = "error", error = err.message)
                 }
             }
+            if (!canceled) runCatching { onJobSettled?.invoke(job.illustId, false, err.message) }
         }
         cancelRequested.remove(job.id)
         persist()
@@ -378,6 +485,14 @@ fun countExistingPages(graph: AppGraph, illust: Illust, urls: List<String>): Int
     }
 }
 
+/**
+ * 逐页下载。进度分三层回调，UI 才能既有页数也有「这一页下到哪了」：
+ *
+ * - [onFileSize]：一页开始（跳过 / 复用本地文件也会报，expected 取本地已有大小），
+ *   给出这页的总字节数（Content-Length 或已存在的 .part）。
+ * - [onPageBytes]：流式落盘过程中周期性上报当前页已写字节，几十毫秒一次、按 1% 节流。
+ * - [onProgress]：一页完工，报「已完成页数 / 总页数」。
+ */
 suspend fun downloadUrls(
     graph: AppGraph,
     illust: Illust,
@@ -385,6 +500,8 @@ suspend fun downloadUrls(
     isCancelled: () -> Boolean = { false },
     resumeExisting: Boolean = true,
     onProgress: (Int, Int) -> Unit = { _, _ -> },
+    onFileSize: (Int, Long) -> Unit = { _, _ -> },
+    onPageBytes: (Int, Long, Long) -> Unit = { _, _, _ -> },
 ) {
     val settings = graph.settings.current
     val dir = settings.resolvedIllustDir(illust)
@@ -397,6 +514,8 @@ suspend fun downloadUrls(
         if (Files.exists(dest) && Files.size(dest) > 32) {
             val skip = resumeExisting || settings.overwritePolicy == 0
             if (skip) {
+                onFileSize(index + 1, Files.size(dest))
+                onPageBytes(index + 1, Files.size(dest), Files.size(dest))
                 onProgress(index + 1, urls.size)
                 return@forEachIndexed
             }
@@ -419,6 +538,9 @@ suspend fun downloadUrls(
                 runCatching { Files.deleteIfExists(part) }
                 existing = 0
             }
+            // Content-Length 是「这一段」的长度：续传时加上已经落盘的那部分才是整页大小。
+            val expected = body.contentLength().let { if (it > 0) it + existing else existing }
+            onFileSize(index + 1, expected)
             val options = if (append) {
                 arrayOf(
                     java.nio.file.StandardOpenOption.CREATE,
@@ -432,8 +554,31 @@ suspend fun downloadUrls(
                     java.nio.file.StandardOpenOption.TRUNCATE_EXISTING,
                 )
             }
+            // 边读边写：每读到一块就报一次进度。不用 byteStream().copyTo(out) 是因为
+            // 那样只在整页落盘完才回调一次，进度条看不到过程（就是这次要修的 bug）。
             Files.newOutputStream(part, *options).use { out ->
-                body.byteStream().copyTo(out)
+                body.byteStream().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    var written = existing
+                    var lastReport = existing
+                    var lastAt = 0L
+                    onPageBytes(index + 1, written, expected)
+                    while (true) {
+                        val read = input.read(buffer)
+                        if (read <= 0) break
+                        out.write(buffer, 0, read)
+                        written += read
+                        val now = System.currentTimeMillis()
+                        // 1% 或 120ms 报一次，避免每个 64KB 块都去写一遍 queue.json
+                        val step = if (expected > 0L) expected / 100L else -1L
+                        if (now - lastAt >= 120L || (step > 0L && written - lastReport >= step)) {
+                            lastReport = written
+                            lastAt = now
+                            onPageBytes(index + 1, written, expected)
+                        }
+                    }
+                    onPageBytes(index + 1, written, if (expected > 0L) expected else written)
+                }
             }
         }
         if (isCancelled()) error(DOWNLOAD_CANCELLED)

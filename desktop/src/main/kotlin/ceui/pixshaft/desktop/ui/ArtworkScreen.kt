@@ -88,6 +88,7 @@ fun ArtworkScreen(
     onOpenRelated: (Long) -> Unit = {},
     embedded: Boolean = false,
     onExpand: (() -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     var illust by remember(id) { mutableStateOf<Illust?>(null) }
     var related by remember(id) { mutableStateOf<List<Illust>>(emptyList()) }
@@ -96,6 +97,16 @@ fun ArtworkScreen(
     var loading by remember(id) { mutableStateOf(true) }
     val scope = rememberCoroutineScope()
     val preview = LocalImagePreview.current
+    // 鼠标返回：默认右键，也可以在设置里换成中键 / 侧键。
+    // 鼠标停在评论输入框上时让位（右键粘贴优先）；判定读在 lambda 里，避免 hover 触发整页重组。
+    val textInputHovered = LocalTextInputHovered.current
+    val settings = graph.settings.current
+    val backButton = ShaftMouseButton.fromBackIndex(settings.backMouseButton)
+    val backModifier = Modifier.mouseButtonClick(
+        button = backButton,
+        isEnabled = { settings.backOnRightClick && onBack != null && !textInputHovered.value },
+        onClick = { onBack?.invoke() },
+    )
 
     LaunchedEffect(id) {
         loading = true
@@ -129,10 +140,10 @@ fun ArtworkScreen(
     }
 
     when {
-        loading && illust == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        loading && illust == null -> Box(backModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             CircularProgressIndicator()
         }
-        illust == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        illust == null -> Box(backModifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(error ?: "加载失败", color = MaterialTheme.colorScheme.error)
             }
@@ -195,7 +206,7 @@ fun ArtworkScreen(
                 preview.open(urls, page.coerceIn(0, urls.lastIndex.coerceAtLeast(0)), item.title)
             }
 
-            Box(Modifier.fillMaxSize()) {
+            Box(backModifier.fillMaxSize()) {
                 if (graph.settings.current.detailStyle == 1) {
                     PhoneDetailLayout(
                         item = item,
@@ -871,7 +882,8 @@ private fun CommentsSection(graph: AppGraph, id: Long, loader: ImageLoader, modi
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it; sendError = null },
-                modifier = Modifier.weight(1f),
+                // 鼠标停在输入框上时，详情页的右键返回要退位（右键粘贴优先）
+                modifier = Modifier.weight(1f).trackTextInputHover(),
                 enabled = !sending,
                 singleLine = false,
                 maxLines = 4,

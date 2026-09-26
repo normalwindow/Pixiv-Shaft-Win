@@ -995,7 +995,12 @@ fun DownloadQueueScreen(graph: AppGraph, loader: ImageLoader, onOpen: (Long) -> 
                                 )
                                 val detail = when (job.status) {
                                     "pending" -> t["downloadWaiting"] + if (queue.paused) ("（" + t["downloadPaused"] + "）") else ""
-                                    "running" -> t["downloadProgress"] + " " + job.finished + "/" + job.total
+                                    "running" -> buildString {
+                                        append(t["downloadProgress"])
+                                        if (job.total > 0) append(" ").append(job.progressText())
+                                        val bytes = job.bytesText()
+                                        if (bytes.isNotBlank()) append("  ·  ").append(bytes)
+                                    }
                                     "done" -> t["downloadDone"] + " · " + job.total
                                     "canceled" -> t["downloadCanceled"]
                                     else -> t["downloadFailed"] + "：" + job.error.orEmpty()
@@ -1031,7 +1036,7 @@ fun DownloadQueueScreen(graph: AppGraph, loader: ImageLoader, onOpen: (Long) -> 
                         }
                         if (job.status == "running" && job.total > 0) {
                             androidx.compose.material3.LinearProgressIndicator(
-                                progress = { job.finished.toFloat() / job.total },
+                                progress = { job.progress() },
                                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             )
                         }

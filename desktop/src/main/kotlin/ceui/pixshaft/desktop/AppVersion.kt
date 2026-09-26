@@ -2,9 +2,9 @@ package ceui.pixshaft.desktop
 
 /** Desktop package identity — keep in sync with `desktop/build.gradle` `packageVersion`. */
 object AppVersion {
-    const val NAME = "0.0.4"
-    const val DISPLAY = "0.0.4"
-    const val CODE = 4
+    const val NAME = "0.0.5"
+    const val DISPLAY = "0.0.5"
+    const val CODE = 5
     /**
      * Advertised on the chat WS handshake as unsigned `&v=`.
      * The server version-gates `room:"global"` delivery; v=1 is treated as a frozen

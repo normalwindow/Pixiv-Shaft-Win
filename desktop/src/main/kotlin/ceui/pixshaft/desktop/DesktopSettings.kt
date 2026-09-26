@@ -67,6 +67,12 @@ data class DesktopSettings(
     val detailPanelCollapsedByDefault: Boolean = false,
     val detailStyle: Int = 0, // 0 默认模式 1 手机原样模式
     val customTitleBar: Boolean = true, // 自绘标题栏（默认开；切换时重建窗口）
+    // 鼠标交互
+    val middleClickDownload: Boolean = true, // 瀑布流中键快捷下载
+    val downloadMouseButton: Int = 1, // 0 中键 1 后侧键 2 前侧键
+    val backOnRightClick: Boolean = true, // 详情页右键返回
+    val backMouseButton: Int = 0, // 0 右键 1 中键 2 后侧键 3 前侧键
+    val quickDownloadToast: Boolean = true, // 快捷下载后弹简易提示
     // 收藏
     val privateStar: Boolean = false,
     val privateFollow: Boolean = false,
@@ -162,6 +168,12 @@ class SettingsStore(private val gson: Gson = Gson()) {
             if (!text.contains("\"customTitleBar\"")) next = next.copy(customTitleBar = true)
             if (!text.contains("\"browseLayout\"")) next = next.copy(browseLayout = 0)
             if (!text.contains("\"detailStyle\"")) next = next.copy(detailStyle = 0)
+            // 老 settings.json 没有这几个键时补默认值（Gson 会把缺失的 boolean 反序列化成 false）
+            if (!text.contains("\"backOnRightClick\"")) next = next.copy(backOnRightClick = true)
+            if (!text.contains("\"middleClickDownload\"")) next = next.copy(middleClickDownload = true)
+            if (!text.contains("\"quickDownloadToast\"")) next = next.copy(quickDownloadToast = true)
+            if (!text.contains("\"downloadMouseButton\"")) next = next.copy(downloadMouseButton = 1)
+            if (!text.contains("\"backMouseButton\"")) next = next.copy(backMouseButton = 0)
             next
         }.getOrDefault(DesktopSettings())
     }

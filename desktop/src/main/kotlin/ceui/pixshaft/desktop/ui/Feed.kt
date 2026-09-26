@@ -429,6 +429,25 @@ private fun IllustPoster(
     val radius = if (ui.compactUi || compact) 10.dp else 14.dp
     var menuOpen by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
     val title = illust.title?.ifBlank { "#${illust.id}" } ?: "#${illust.id}"
+    // 中键（按键可配）快捷下载 + 简易 pop 提示
+    val quickToast = LocalQuickToast.current
+    val quickDownload = Modifier.mouseButtonClick(
+        button = ShaftMouseButton.fromDownloadIndex(ui.downloadMouseButton),
+        isEnabled = { ui.middleClickDownload && onDownload != null && batch?.active != true },
+        onClick = {
+            onDownload?.invoke(illust)
+            if (ui.quickDownloadToast) {
+                quickToast.show(
+                    QuickToast(
+                        key = quickToastKey(illust.id),
+                        title = title,
+                        detail = if (downloadedIds.contains(illust.id)) "已在本地库，重新加入下载队列" else "已加入下载队列",
+                        thumbUrl = illust.previewUrl(),
+                    ),
+                )
+            }
+        },
+    )
     val meta = buildList {
         illust.user?.name?.takeIf { it.isNotBlank() }?.let(::add)
         illust.total_bookmarks?.takeIf { it > 0 }?.let { add("${it} 收藏") }
@@ -443,6 +462,7 @@ private fun IllustPoster(
                 else Modifier,
             )
             .onPointerSecondaryPress { menuOpen = true }
+            .then(quickDownload)
             .clickable {
                 if (batch?.active == true) batch.toggle(illust.id) else onOpen(illust)
             },
