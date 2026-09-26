@@ -1,6 +1,7 @@
 ---
 name: genupdate
 description: Cut a Pixiv-Shaft release — bump version, tag, draft a concise changelog, create GitHub release marked latest, upload the APK with the project's naming convention. Use when the user says /genupdate or asks to "发版 / 出新版本 / cut a release".
+disable-model-invocation: true
 ---
 
 # /genupdate — Pixiv-Shaft 发版流水线

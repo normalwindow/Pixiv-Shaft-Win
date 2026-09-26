@@ -426,7 +426,7 @@ class NetworkProbe(
         var fail = 0
         var proto: String? = null
         var firstErr: String? = null
-        val deadline = System.currentTimeMillis() + 4_000
+        val deadline = System.currentTimeMillis() + 12_000
         var n = 0
         try {
             while (System.currentTimeMillis() < deadline && n < 8 && !cancelled.get()) {
@@ -484,7 +484,7 @@ class NetworkProbe(
         val builder = OkHttpClient.Builder()
             .connectionPool(ConnectionPool(0, 1, TimeUnit.SECONDS))
             .connectTimeout(5, TimeUnit.SECONDS)
-            .readTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(5, TimeUnit.SECONDS)
             .proxy(AppGraph.proxyFor(graph.settings.current))
             .dns(AppGraph.dnsFor(graph.settings.current))

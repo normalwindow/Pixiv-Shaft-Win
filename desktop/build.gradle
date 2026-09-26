@@ -21,6 +21,14 @@ dependencies {
     implementation compose.materialIconsExtended
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2'
     implementation 'net.java.dev.jna:jna:5.14.0'
+    // JBR 的 `com.jetbrains.WindowDecorations` 接口。
+    // 用 `implementation` 而不是 `compileOnly`：这个 jar 里的 `com.jetbrains.JBR` 是**桥接类**，
+    // 运行时负责把调用转交给 JBR 内部的实现（`JBRApiBootstrap` + 动态代理）。
+    // 只放编译期会在启动时报 `NoClassDefFoundError: com/jetbrains/JBR`（实测）。
+    // 体积 < 100 KB，可忽略。
+    implementation 'org.jetbrains.runtime:jbr-api:1.10.1'
+    // FlatLaf：仅用于统一系统标题栏模式下的外观（DWM 非客户区 / 圆角）。
+    implementation 'com.formdev:flatlaf:3.6.1'
     implementation 'io.coil-kt.coil3:coil-compose:3.1.0'
     implementation 'io.coil-kt.coil3:coil-network-okhttp:3.1.0'
     testImplementation 'junit:junit:4.13.2'

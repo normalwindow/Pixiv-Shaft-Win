@@ -121,6 +121,57 @@ fun WebAuthHelperPanel(
                     }
                 }
             }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        runCatching { WebAuthInstaller.openReleasePage() }
+                            .onFailure { message = it.message ?: it.toString() }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Text(t["webAuthOpenPage"])
+                }
+                OutlinedButton(
+                    onClick = {
+                        val picked = WebAuthInstaller.pickExe() ?: return@OutlinedButton
+                        busy = true
+                        message = t["webAuthDownloading"]
+                        scope.launch {
+                            val result = withContext(Dispatchers.IO) {
+                                runCatching { WebAuthInstaller.installFromFile(picked) }
+                            }
+                            busy = false
+                            result.fold(
+                                onSuccess = {
+                                    refresh()
+                                    message = t["webAuthPicked"] + "\n" + it.toAbsolutePath()
+                                },
+                                onFailure = { err ->
+                                    message = t["webAuthPickFailed"] + "：" + (err.message ?: err.toString())
+                                },
+                            )
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Text(t["webAuthPickFile"])
+                }
+                OutlinedButton(
+                    onClick = {
+                        runCatching { WebAuthInstaller.openInstallFolder() }
+                            .onFailure { message = it.message ?: it.toString() }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.height(40.dp),
+                ) {
+                    Text(t["webAuthOpenFolder"])
+                }
+            }
         }
     }
 }

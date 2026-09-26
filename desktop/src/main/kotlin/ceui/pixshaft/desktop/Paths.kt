@@ -58,6 +58,12 @@ object AppPaths {
         return dir
     }
 
+    /** Ephemeral Edge/Chrome profile for headless QUIC fetch. Not the user's real browser. */
+    fun chromiumNetDir(override: String? = null): Path = cacheRoot(override).resolve("chromium-net")
+
+    /** Ephemeral profile for the Chromium OAuth fallback window. */
+    fun chromiumLoginDir(override: String? = null): Path = cacheRoot(override).resolve("chromium-login")
+
     private fun peekCachePath(): String? {
         if (!Files.exists(settingsFile)) return null
         return runCatching {
@@ -80,5 +86,10 @@ object AppPaths {
                 if (path != dir) runCatching { Files.deleteIfExists(path) }
             }
         }
+    }
+
+    fun deleteQuietly(dir: Path) {
+        clearDirectory(dir)
+        runCatching { Files.deleteIfExists(dir) }
     }
 }

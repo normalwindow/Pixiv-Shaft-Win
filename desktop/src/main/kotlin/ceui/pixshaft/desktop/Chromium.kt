@@ -64,6 +64,108 @@ object Chromium {
     fun originToForceQuicOn(): String =
         PixivDns.API_HOSTS.joinToString(",") { "$it:443" }
 
+    /** Edge dumps component CRXs, ML models, Wallet, telemetry into --user-data-dir. */
+    internal val PROFILE_JUNK_NAMES = listOf(
+        "component_crx_cache",
+        "ProvenanceData",
+        "ProvenanceDataTensors",
+        "WidevineCdm",
+        "Edge Wallet",
+        "Edge Shopping",
+        "Edge Sidebar",
+        "Edge Entity Extraction",
+        "EdgeLanguageDetectionModel",
+        "Speech Recognition",
+        "Subresource Filter",
+        "SmartScreen",
+        "hyphen-data",
+        "ZxcvbnData",
+        "GrShaderCache",
+        "ShaderCache",
+        "GraphiteDawnCache",
+        "BrowserMetrics",
+        "BrowserMetrics-spare.pma",
+        "Crashpad",
+        "Safe Browsing",
+        "Well Known Domains",
+        "Autofill",
+        "PKIMetadata",
+        "MEIPreload",
+        "Crowd Deny",
+        "FileTypePolicies",
+        "OptimizationHints",
+        "OnDeviceHeadSuggestModel",
+        "SSLErrorAssistant",
+        "Subresource Filter",
+    )
+
+    /**
+     * Old builds kept full Edge profiles under %APPDATA%/PixShaft/chromium-*.
+     * Tokens live in session.json; those dirs are safe to delete.
+     * Helper sessions now live under cache/chromium-net/s-... so a leftover
+     * SingletonLock cannot kill the next DevTools launch.
+     */
+    fun purgeLegacyProfiles() {
+        AppPaths.deleteQuietly(AppPaths.root.resolve("chromium-net"))
+        AppPaths.deleteQuietly(AppPaths.root.resolve("chromium-login"))
+        sweepStaleProfiles(AppPaths.chromiumNetDir())
+        sweepStaleProfiles(AppPaths.chromiumLoginDir())
+    }
+
+    internal fun newProfileDir(parent: Path): Path {
+        val dir = parent.resolve("s-" + System.nanoTime().toString(36))
+        Files.createDirectories(dir)
+        return dir
+    }
+
+    internal fun sweepStaleProfiles(parent: Path) {
+        if (!Files.isDirectory(parent)) return
+        runCatching {
+            Files.list(parent).use { stream ->
+                stream.forEach { child ->
+                    val name = child.fileName.toString()
+                    if (name.startsWith("s-") || PROFILE_JUNK_NAMES.any { it.equals(name, ignoreCase = true) } ||
+                        name.startsWith("BrowserMetrics", ignoreCase = true) ||
+                        name.equals("Default", ignoreCase = true) ||
+                        name.equals("DevToolsActivePort", ignoreCase = true) ||
+                        name.equals("SingletonLock", ignoreCase = true) ||
+                        name.equals("SingletonCookie", ignoreCase = true) ||
+                        name.equals("SingletonSocket", ignoreCase = true)
+                    ) {
+                        AppPaths.deleteQuietly(child)
+                    }
+                }
+            }
+        }
+    }
+
+    internal fun prepareEphemeralProfile(dir: Path) {
+        runCatching { Files.createDirectories(dir) }
+        pruneProfileJunk(dir)
+    }
+
+    /** Edge's msedge.exe stub can exit before DevToolsActivePort exists. Wait a beat. */
+    internal fun deadWithoutDevTools(
+        processAlive: Boolean,
+        boundPort: Int,
+        iteration: Int,
+        graceIterations: Int = 8,
+    ): Boolean = !processAlive && boundPort <= 0 && iteration >= graceIterations
+
+    internal fun pruneProfileJunk(dir: Path) {
+        if (!Files.isDirectory(dir)) return
+        runCatching {
+            Files.list(dir).use { stream ->
+                stream.forEach { child ->
+                    val name = child.fileName.toString()
+                    val junk = PROFILE_JUNK_NAMES.any { it.equals(name, ignoreCase = true) } ||
+                        name.startsWith("BrowserMetrics", ignoreCase = true)
+                    if (junk) AppPaths.deleteQuietly(child)
+                }
+            }
+        }
+    }
+
     /**
      * Headless fetch and login share this argv. Edge 150's old `--headless`
      * (without `=new`) aborts on an existing profile with
@@ -94,10 +196,19 @@ object Chromium {
             "--disable-extensions",
             "--disable-sync",
             "--disable-background-networking",
+            "--disable-component-update",
+            "--disable-component-extensions-with-background-pages",
+            "--disable-default-apps",
+            "--disable-client-side-phishing-detection",
+            "--disable-domain-reliability",
+            "--disable-breakpad",
+            "--disable-crash-reporter",
+            "--metrics-recording-only",
+            "--disk-cache-size=67108864",
             "--disable-popup-blocking",
             "--disable-session-crashed-bubble",
             "--hide-crash-restore-bubble",
-            "--disable-features=Translate,MediaRouter,msImplicitSignin",
+            "--disable-features=Translate,MediaRouter,msImplicitSignin,InterestFeedContentSuggestions,AutofillServerCommunication,CertificateTransparencyComponentUpdater,OptimizationHints,CalculateNativeWinOcclusion,HeavyAdPrivacyMitigations,EdgeShopping,EdgeWallet,msEdgeSidebar,msEdgeCollections,msEdgeWorkspaces,SmartScreen,msEdgeDiscover",
             "--host-resolver-rules=${hostResolverRules()}",
             "--enable-quic",
             "--origin-to-force-quic-on=${originToForceQuicOn()}",
@@ -110,7 +221,8 @@ object Chromium {
         args += proxyArgs()
         if (headless) {
             args += "--headless=new"
-            args += "--disable-gpu"
+            // --disable-gpu hangs Edge 150's renderer on some machines so
+            // Page.enable never replies. New headless does not need it.
             args += "--window-position=-32000,-32000"
         } else {
             args += "--window-size=480,800"
@@ -124,6 +236,95 @@ object Chromium {
         return first.toIntOrNull()?.takeIf { it in 1..65535 }
     }
 
+    /** Edge 150 page-target sockets accept the handshake but never reply. Use the browser socket. */
+    internal fun parseBrowserWebSocket(port: Int, activePortText: String): String? {
+        if (port !in 1..65535) return null
+        val path = activePortText.lineSequence().map { it.trim() }
+            .firstOrNull { it.startsWith("/devtools/") } ?: return null
+        return "ws://127.0.0.1:$port$path"
+    }
+
+    internal fun parseBrowserWebSocketFromVersion(versionJson: String): String? =
+        runCatching {
+            JsonParser.parseString(versionJson).asJsonObject
+                .get("webSocketDebuggerUrl")?.asString
+                ?.takeIf { it.startsWith("ws://") || it.startsWith("wss://") }
+        }.getOrNull()
+
+    internal fun cdpUsesBrowserSession(method: String): Boolean =
+        method.startsWith("Target.") || method.startsWith("Browser.")
+
+    internal fun pickPageTargetId(listJson: String, excludeId: String? = null, preferBlank: Boolean = true): String? {
+        val parsed = runCatching { JsonParser.parseString(listJson) }.getOrNull() ?: return null
+        if (!parsed.isJsonArray) return null
+        val pages = parsed.asJsonArray.mapNotNull { el ->
+            if (!el.isJsonObject) return@mapNotNull null
+            val obj = el.asJsonObject
+            val type = obj.get("type")?.asString.orEmpty()
+            val url = obj.get("url")?.asString.orEmpty()
+            val id = obj.get("id")?.asString?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            if (id == excludeId) return@mapNotNull null
+            if (type != "page" && type != "app" && type != "webview") return@mapNotNull null
+            if (url.startsWith("chrome-extension://") ||
+                url.startsWith("edge-extension://") ||
+                url.startsWith("chrome://") ||
+                url.startsWith("edge://")
+            ) return@mapNotNull null
+            obj
+        }
+        val blank = pages.firstOrNull { obj ->
+            val url = obj.get("url")?.asString.orEmpty()
+            url == "about:blank" || url.isBlank()
+        }
+        val live = pages.firstOrNull { obj ->
+            val url = obj.get("url")?.asString.orEmpty()
+            url.isNotBlank() && url != "about:blank"
+        }
+        val chosen = if (preferBlank) blank ?: live ?: pages.firstOrNull()
+        else live ?: blank ?: pages.firstOrNull()
+        return chosen?.get("id")?.asString
+    }
+
+    /**
+     * Edge 150's command-line placeholder is type=page, url empty, pid=0 —
+     * Runtime.enable on it never replies. A Target.createTarget about:blank
+     * also starts at pid=0, but that session is a real renderer (QUIC fetch
+     * works). Only the empty-url placeholder is dead.
+     */
+    internal fun isLivePageTarget(info: JsonObject): Boolean {
+        val type = info.get("type")?.asString.orEmpty()
+        if (type != "page" && type != "app" && type != "webview") return false
+        val url = info.get("url")?.asString.orEmpty()
+        if (url.startsWith("chrome-extension://") ||
+            url.startsWith("edge-extension://") ||
+            url.startsWith("chrome://") ||
+            url.startsWith("edge://")
+        ) return false
+        val pidZero = info.has("pid") &&
+            info.get("pid").isJsonPrimitive &&
+            info.get("pid").asLong == 0L
+        if (pidZero && url.isBlank()) return false
+        return true
+    }
+
+    /** Page-only auto-attach: Edge 150 still loads built-in extension targets. */
+    internal fun autoAttachParams(
+        waitForDebuggerOnStart: Boolean = false,
+        pageOnly: Boolean = true,
+    ): JsonObject = JsonObject().apply {
+        addProperty("autoAttach", true)
+        addProperty("waitForDebuggerOnStart", waitForDebuggerOnStart)
+        addProperty("flatten", true)
+        if (pageOnly) {
+            add(
+                "filter",
+                JsonArray().apply {
+                    add(JsonObject().apply { addProperty("type", "page") })
+                },
+            )
+        }
+    }
+
     private val devToolsListening = Regex(
         """DevTools listening on ws://(?:127\.0\.0\.1|localhost|\[::1\]):(\d+)/""",
         RegexOption.IGNORE_CASE,
@@ -131,6 +332,14 @@ object Chromium {
 
     internal fun parseDevToolsListeningPort(log: String): Int? =
         devToolsListening.find(log)?.groupValues?.getOrNull(1)?.toIntOrNull()?.takeIf { it in 1..65535 }
+
+    internal fun parseDevToolsListeningWebSocket(log: String): String? {
+        val match = Regex(
+            """DevTools listening on (ws://(?:127\.0\.0\.1|localhost|\[::1\]):\d+/devtools/\S+)""",
+            RegexOption.IGNORE_CASE,
+        ).find(log) ?: return null
+        return match.groupValues.getOrNull(1)?.trim()?.trimEnd(',', ';')
+    }
 
     /** Tiny same-origin document so fetch() is CORS-safe without loading the real homepage. */
     internal fun originWarmupUrl(origin: String): String = origin.trimEnd('/') + "/robots.txt"
@@ -562,6 +771,7 @@ class ChromiumSession private constructor(
     private val cdp: CdpClient,
     private val debugPort: Int,
     private val loginUrl: String?,
+    private val userDataDir: Path,
 ) : AutoCloseable {
     private val closed = AtomicBoolean(false)
     private val localHttp = Chromium.loopbackClient()
@@ -806,7 +1016,7 @@ class ChromiumSession private constructor(
         for (page in pages) {
             val url = page.get("url")?.asString.orEmpty()
             if (url != "about:blank" && url.isNotBlank()) continue
-            if (page.get("webSocketDebuggerUrl")?.asString == cdp.currentWsUrl) continue
+            if (page.get("id")?.asString == cdp.attachedTargetId) continue
             val id = page.get("id")?.asString ?: continue
             runCatching { httpGet(localHttp, "http://127.0.0.1:$debugPort/json/close/$id") }
         }
@@ -824,12 +1034,12 @@ class ChromiumSession private constructor(
         if (pages.isEmpty()) return
         val best = pages.maxByOrNull { ceui.pixshaft.shared.auth.PixivOAuth.oauthStage(it.get("url")?.asString) }
             ?: return
-        val ws = best.get("webSocketDebuggerUrl")?.asString ?: return
-        if (ws == cdp.currentWsUrl) return
+        val targetId = best.get("id")?.asString ?: return
+        if (targetId == cdp.attachedTargetId) return
         val stage = ceui.pixshaft.shared.auth.PixivOAuth.oauthStage(best.get("url")?.asString)
         if (stage < 20) return
         onStatus("登录跳到了新页面，正在跟随…")
-        runCatching { reattachTo(ws, onStatus) }
+        runCatching { reattachTo(targetId, onStatus) }
     }
 
     private fun pollClipboard(sink: LoginReturnChannel) {
@@ -897,9 +1107,9 @@ class ChromiumSession private constructor(
         }
     }
 
-    private fun reattachTo(ws: String, onStatus: (String) -> Unit) {
-        cdp.reconnect(ws)
-        preparePage(cdp, debugPort, onStatus)
+    private fun reattachTo(targetId: String, onStatus: (String) -> Unit) {
+        cdp.attachPage(targetId)
+        preparePage(cdp, debugPort, onStatus, loginEmulation = loginUrl != null)
     }
 
     fun execute(request: Request): Response {
@@ -1199,13 +1409,15 @@ class ChromiumSession private constructor(
             localHttp.connectionPool.evictAll()
         }
         Chromium.killProcessTree(process)
+        // Best-effort: Edge often keeps files locked for a beat. Next launch also wipes.
+        runCatching { AppPaths.clearDirectory(userDataDir) }
     }
 
     companion object {
         fun launchLogin(url: String, onStatus: (String) -> Unit): ChromiumSession {
             onStatus("正在启动 Chromium 登录窗…")
             return launch(
-                userDataDir = AppPaths.root.resolve("chromium-login"),
+                userDataDir = Chromium.newProfileDir(AppPaths.chromiumLoginDir()),
                 url = url,
                 headless = false,
                 onStatus = onStatus,
@@ -1214,7 +1426,7 @@ class ChromiumSession private constructor(
 
         fun launchHeadless(): ChromiumSession =
             launch(
-                userDataDir = AppPaths.root.resolve("chromium-net"),
+                userDataDir = Chromium.newProfileDir(AppPaths.chromiumNetDir()),
                 url = "about:blank",
                 headless = true,
                 onStatus = {},
@@ -1230,7 +1442,7 @@ class ChromiumSession private constructor(
                 ?: throw IOException(
                     "本机没有 Chrome / Edge，无法打开 Pixiv 登录。请安装 Microsoft Edge 或 Google Chrome，或粘贴 refresh_token。",
                 )
-            Files.createDirectories(userDataDir)
+            Chromium.prepareEphemeralProfile(userDataDir)
             val cacheDir = AppPaths.cacheRoot().resolve("chromium")
             val crashDir = AppPaths.cacheRoot().resolve("chromium-crash")
             Files.createDirectories(cacheDir)
@@ -1253,21 +1465,23 @@ class ChromiumSession private constructor(
             val logTail = ConcurrentLinkedDeque<String>()
             drain(process, logTail)
             try {
-                val (port, pageWs) = waitForPageWebSocket(process, userDataDir, 0, logTail)
-                val cdp = CdpClient(pageWs)
+                val (port, browserWs, _) = waitForPageWebSocket(process, userDataDir, 0, logTail)
+                val cdp = CdpClient(browserWs)
                 cdp.connect()
+                cdp.createAndAttachBlank()
                 preparePage(cdp, port, onStatus, loginEmulation = !headless)
                 if (!url.isNullOrBlank() && url != "about:blank") {
                     onStatus("正在打开 Pixiv 登录页…")
                     navigateAndPrepare(cdp, process, userDataDir, port, url, onStatus)
                 }
                 onStatus("已打开登录窗，请在弹出的 Chromium 窗口完成登录")
-                return ChromiumSession(process, cdp, port, url)
+                return ChromiumSession(process, cdp, port, url, userDataDir)
             } catch (error: Throwable) {
                 val extra = logTail.toList().takeLast(20).joinToString("\n")
                 CrashLog.write(error)
                 if (extra.isNotBlank()) CrashLog.write("chromium-out:\n$extra")
                 runCatching { process.destroyForcibly() }
+                runCatching { AppPaths.deleteQuietly(userDataDir) }
                 if (extra.isBlank()) throw error
                 throw IOException("${error.message}\nchromium-out:\n$extra", error)
             }
@@ -1291,7 +1505,10 @@ class ChromiumSession private constructor(
             onStatus: (String) -> Unit,
             loginEmulation: Boolean = true,
         ) {
-            enableTargetDiscovery(cdp)
+            // Flatten auto-attach belongs on the visible login window.
+            // On the headless page websocket it swallows Page.enable replies
+            // (no sessionId), which shows up as a 20s CDP timeout.
+            if (loginEmulation) enableTargetDiscovery(cdp)
             enableDomains(cdp)
             // The net session needs this too: a HeadlessEdg UA turns every
             // oauth.secure POST into pixiv's CAPTCHA interstitial.
@@ -1355,14 +1572,12 @@ class ChromiumSession private constructor(
             onStatus: (String) -> Unit,
             userDataDir: Path? = null,
         ) {
-            val (_, pageWs) = waitForPageWebSocket(
-                process,
-                userDataDir,
-                port,
-                ConcurrentLinkedDeque(),
-                excludeWs = cdp.currentWsUrl,
-            )
-            cdp.reconnect(pageWs)
+            val http = Chromium.loopbackClient()
+            val list = httpGet(http, "http://127.0.0.1:$port/json/list")
+            val targetId = Chromium.pickPageTargetId(list, excludeId = cdp.attachedTargetId, preferBlank = false)
+                ?: Chromium.pickPageTargetId(list, preferBlank = true)
+                ?: throw IOException("没有可附加的页面")
+            cdp.attachPage(targetId)
             enableDomains(cdp)
             overrideUserAgent(cdp)
             overrideDevice(cdp)
@@ -1376,20 +1591,13 @@ class ChromiumSession private constructor(
                 cdp.send("Target.setDiscoverTargets", JsonObject().apply { addProperty("discover", true) })
             }
             runCatching {
-                cdp.send(
-                    "Target.setAutoAttach",
-                    JsonObject().apply {
-                        addProperty("autoAttach", true)
-                        addProperty("waitForDebuggerOnStart", false)
-                        addProperty("flatten", true)
-                    },
-                )
+                cdp.send("Target.setAutoAttach", Chromium.autoAttachParams())
             }
         }
 
         private fun enableDomains(cdp: CdpClient, sessionId: String? = null) {
-            sendOrRecover(cdp, "Page.enable", sessionId)
             sendOrRecover(cdp, "Runtime.enable", sessionId)
+            sendOrRecover(cdp, "Page.enable", sessionId)
             runCatching { cdp.send("Inspector.enable", sessionId = sessionId) }
             sendOrRecover(cdp, "Network.enable", sessionId)
             runCatching {
@@ -1563,67 +1771,61 @@ class ChromiumSession private constructor(
             userDataDir: Path?,
             requestedPort: Int,
             logTail: ConcurrentLinkedDeque<String>,
-            excludeWs: String? = null,
-        ): Pair<Int, String> {
+            excludeTargetId: String? = null,
+        ): Triple<Int, String, String> {
             val http = Chromium.loopbackClient()
             var lastError: Throwable? = null
             var boundPort = requestedPort.takeIf { it > 0 } ?: 0
-            repeat(80) {
-                if (!process.isAlive) {
-                    val extra = logTail.toList().takeLast(12).joinToString("\n")
-                    throw IOException(
-                        "Chromium 进程已退出，DevTools 未就绪" +
-                            if (extra.isBlank()) {
-                                lastError?.message?.let { ": $it" }.orEmpty()
-                            } else {
-                                ":\n$extra"
-                            },
-                    )
-                }
+            var browserWs = ""
+            repeat(80) { iteration ->
+                val alive = process.isAlive
                 // Re-probe every iteration: a stale DevToolsActivePort from a
                 // previous crashed instance must not latch onto this loop, the
                 // fresh browser rewrites the file once its socket is live.
-                boundPort = Chromium.parseDevToolsListeningPort(logTail.joinToString("\n")) ?: 0
-                if (boundPort <= 0 && userDataDir != null) {
+                val logBlob = logTail.joinToString("\n")
+                boundPort = Chromium.parseDevToolsListeningPort(logBlob) ?: 0
+                browserWs = Chromium.parseDevToolsListeningWebSocket(logBlob) ?: browserWs
+                if (userDataDir != null) {
                     val file = userDataDir.resolve("DevToolsActivePort")
                     if (Files.isRegularFile(file)) {
-                        boundPort = runCatching { Chromium.parseDevToolsActivePort(Files.readString(file)) }
-                            .getOrNull()
-                            ?: 0
+                        val text = runCatching { Files.readString(file) }.getOrNull().orEmpty()
+                        if (boundPort <= 0) {
+                            boundPort = Chromium.parseDevToolsActivePort(text) ?: 0
+                        }
+                        if (boundPort > 0) {
+                            browserWs = Chromium.parseBrowserWebSocket(boundPort, text) ?: browserWs
+                        }
                     }
+                }
+                if (Chromium.deadWithoutDevTools(alive, boundPort, iteration)) {
+                    val extra = logTail.toList().takeLast(12).joinToString("\n")
+                    val code = runCatching { process.exitValue() }.getOrNull()
+                    val detail = when {
+                        extra.isNotBlank() -> ":\n" + extra
+                        lastError?.message != null -> ": " + lastError.message
+                        else -> ""
+                    }
+                    throw IOException(
+                        "Chromium 进程已退出，DevTools 未就绪" +
+                            (code?.let { "（exit " + it + "）" } ?: "") +
+                            detail,
+                    )
                 }
                 if (boundPort > 0) {
                     try {
                         val list = httpGet(http, "http://127.0.0.1:$boundPort/json/list")
-                        val pages = JsonParser.parseString(list).asJsonArray.mapNotNull { element ->
-                            val obj = element.asJsonObject
-                            val type = obj.get("type")?.asString.orEmpty()
-                            val ws = obj.get("webSocketDebuggerUrl")?.asString ?: return@mapNotNull null
-                            if (ws == excludeWs) return@mapNotNull null
-                            if (type == "page" || type == "app" || type == "webview") obj else null
+                        val pageId = Chromium.pickPageTargetId(
+                            list,
+                            excludeId = excludeTargetId,
+                            preferBlank = excludeTargetId == null,
+                        )
+                        if (browserWs.isBlank()) {
+                            val version = httpGet(http, "http://127.0.0.1:$boundPort/json/version")
+                            browserWs = Chromium.parseBrowserWebSocketFromVersion(version).orEmpty()
                         }
-                        val blank = pages.firstOrNull { obj ->
-                            val url = obj.get("url")?.asString.orEmpty()
-                            url == "about:blank" || url.isBlank()
+                        if (pageId != null && browserWs.isNotBlank()) {
+                            return Triple(boundPort, browserWs, pageId)
                         }
-                        val live = pages
-                            .filter { obj ->
-                                val url = obj.get("url")?.asString.orEmpty()
-                                url.isNotBlank() &&
-                                    url != "about:blank" &&
-                                    !url.startsWith("chrome-error://") &&
-                                    !url.startsWith("edge-error://")
-                            }
-                            .maxByOrNull { obj ->
-                                ceui.pixshaft.shared.auth.PixivOAuth.oauthStage(obj.get("url")?.asString)
-                            }
-                        val chosen = if (excludeWs == null) {
-                            blank ?: live ?: pages.firstOrNull()
-                        } else {
-                            live ?: blank ?: pages.firstOrNull()
-                        }
-                        chosen?.get("webSocketDebuggerUrl")?.asString?.let { return boundPort to it }
-                        runCatching { httpGet(http, "http://127.0.0.1:$boundPort/json/version") }
                     } catch (t: Throwable) {
                         lastError = t
                     }
@@ -1761,6 +1963,8 @@ internal class CdpClient(private var wsUrl: String) {
     private val generation = AtomicInteger(0)
     private val failure = AtomicReference<Throwable?>(null)
     private var socket: WebSocket? = null
+    @Volatile var sessionId: String? = null
+    @Volatile var attachedTargetId: String? = null
     private val http = OkHttpClient.Builder()
         .proxy(java.net.Proxy.NO_PROXY)
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -1810,11 +2014,57 @@ internal class CdpClient(private var wsUrl: String) {
     fun reconnect(nextWsUrl: String) {
         generation.incrementAndGet()
         failAll(IOException("CDP reattach"))
+        sessionId = null
+        attachedTargetId = null
         val old = socket
         socket = null
         runCatching { old?.close(1000, "reattach") }
         wsUrl = nextWsUrl
         connect()
+    }
+
+    fun attachPage(targetId: String, timeoutSec: Long = 10) {
+        val result = send(
+            "Target.attachToTarget",
+            JsonObject().apply {
+                addProperty("targetId", targetId)
+                addProperty("flatten", true)
+            },
+            timeoutSec = timeoutSec,
+        )
+        val sid = result.get("sessionId")?.asString?.takeIf { it.isNotBlank() }
+            ?: throw IOException("Target.attachToTarget 没有 sessionId")
+        sessionId = sid
+        attachedTargetId = targetId
+    }
+
+    /**
+     * json/list's first about:blank is a pid=0 placeholder. Runtime.enable on it
+     * never replies. Create a real renderer and attach by targetId — Edge 150
+     * reports pid=0 on that created page too, so waiting for a live pid hangs.
+     */
+    fun createAndAttachBlank(timeoutSec: Long = 15) {
+        try {
+            send("Target.setAutoAttach", Chromium.autoAttachParams(), timeoutSec = 8)
+        } catch (_: Exception) {
+            send(
+                "Target.setAutoAttach",
+                Chromium.autoAttachParams(pageOnly = false),
+                timeoutSec = 8,
+            )
+        }
+        val created = send(
+            "Target.createTarget",
+            JsonObject().apply { addProperty("url", "about:blank") },
+            timeoutSec = 10,
+        )
+        val tid = created.get("targetId")?.asString?.takeIf { it.isNotBlank() }
+            ?: throw IOException("没有可用的 Chromium 渲染进程（Target.createTarget 没有 targetId）")
+        try {
+            attachPage(tid, timeoutSec = timeoutSec)
+        } catch (error: Exception) {
+            throw IOException("没有可用的 Chromium 渲染进程（Edge 初始 about:blank pid=0）", error)
+        }
     }
 
     fun addListener(listener: (String, JsonObject) -> Unit) {
@@ -1834,11 +2084,16 @@ internal class CdpClient(private var wsUrl: String) {
         val id = nextId.incrementAndGet()
         val future = CompletableFuture<JsonObject>()
         pending[id] = future
+        val sid = when {
+            !sessionId.isNullOrBlank() -> sessionId
+            Chromium.cdpUsesBrowserSession(method) -> null
+            else -> this.sessionId
+        }
         val payload = JsonObject().apply {
             addProperty("id", id)
             addProperty("method", method)
             if (params != null) add("params", params)
-            if (!sessionId.isNullOrBlank()) addProperty("sessionId", sessionId)
+            if (!sid.isNullOrBlank()) addProperty("sessionId", sid)
         }
         val ws = socket ?: throw IOException("CDP 未连接")
         if (!ws.send(gson.toJson(payload))) {
@@ -1862,26 +2117,30 @@ internal class CdpClient(private var wsUrl: String) {
 
     private fun handle(text: String) {
         val obj = runCatching { JsonParser.parseString(text).asJsonObject }.getOrNull() ?: return
+        val idEl = obj.get("id")
+        if (idEl != null && !idEl.isJsonNull) {
+            val id = runCatching { idEl.asInt }.getOrNull()
+            val future = id?.let { pending.remove(it) }
+            if (future != null) {
+                val error = obj.get("error")
+                if (error != null && !error.isJsonNull) {
+                    val message = if (error.isJsonObject) {
+                        error.asJsonObject.get("message")?.asString?.takeIf { it.isNotBlank() }
+                            ?: error.toString()
+                    } else {
+                        error.asString
+                    }
+                    future.completeExceptionally(IOException(message))
+                } else {
+                    val result = obj.getAsJsonObject("result") ?: JsonObject()
+                    future.complete(result)
+                }
+            }
+        }
         val method = obj.get("method")?.asString
         if (method != null) {
             val params = obj.getAsJsonObject("params") ?: JsonObject()
             listeners.forEach { runCatching { it(method, params) } }
-            return
-        }
-        val id = obj.get("id")?.asInt ?: return
-        val future = pending.remove(id) ?: return
-        val error = obj.get("error")
-        if (error != null && !error.isJsonNull) {
-            val message = if (error.isJsonObject) {
-                error.asJsonObject.get("message")?.asString?.takeIf { it.isNotBlank() }
-                    ?: error.toString()
-            } else {
-                error.asString
-            }
-            future.completeExceptionally(IOException(message))
-        } else {
-            val result = obj.getAsJsonObject("result") ?: JsonObject()
-            future.complete(result)
         }
     }
 

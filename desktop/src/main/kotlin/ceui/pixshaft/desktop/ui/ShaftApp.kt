@@ -109,7 +109,6 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.zIndex
 import androidx.compose.foundation.clickable
 import ceui.pixshaft.desktop.AppGraph
-import ceui.pixshaft.desktop.WindowChrome
 import ceui.pixshaft.desktop.BatchSelection
 import ceui.pixshaft.desktop.FeatureColumn
 import ceui.pixshaft.desktop.FeedState
@@ -129,6 +128,7 @@ fun ShaftApp(
     initialUri: String?,
     windowState: WindowState,
     modifier: Modifier = Modifier.fillMaxSize(),
+    onToggleFullscreen: () -> Unit = {},
 ) {
     val imagePreview = remember { ImagePreviewHost() }
     val feedZoom = remember { mutableFloatStateOf(1f) }
@@ -201,6 +201,7 @@ fun ShaftApp(
                                 graph.logout()
                                 loggedIn = false
                             },
+                            onToggleFullscreen = onToggleFullscreen,
                         )
                     }
                 }
@@ -217,6 +218,7 @@ private fun LoggedInShell(
     pendingDest: Dest?,
     onPendingConsumed: () -> Unit,
     onLogout: () -> Unit,
+    onToggleFullscreen: () -> Unit = {},
 ) {
     val backStack = remember { mutableStateListOf(startDestOf(graph.settings.current.navigationInitPosition)) }
     val current = backStack.last()
@@ -254,7 +256,7 @@ private fun LoggedInShell(
     }
 
     fun toggleFullscreen() {
-        WindowChrome.toggleFullscreen(windowState)
+        onToggleFullscreen()
     }
 
     val splitOn = graph.settings.current.browseLayout == 1
@@ -295,7 +297,7 @@ private fun LoggedInShell(
                         searchOpen -> searchOpen = false
                         drawerOpen -> drawerOpen = false
                         split && paneId != null -> paneId = null
-                        fullscreen -> WindowChrome.toggleFullscreen(windowState)
+                        fullscreen -> onToggleFullscreen()
                         else -> pop()
                     }
                     true

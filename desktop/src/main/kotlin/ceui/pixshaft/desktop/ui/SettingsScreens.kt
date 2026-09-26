@@ -244,8 +244,13 @@ fun SettingsCategoryScreen(
                     ChoiceRow("强调色", listOf("蓝", "紫", "青", "玫红", "琥珀", "绿", "橙", "洋红"), s.accentColor.coerceIn(0, 7)) {
                         set(s.copy(accentColor = it))
                     }
-                    ToggleRow("自绘标题栏", "默认开。无边框窗口：拖拽 / 贴靠 / 边缘缩放，切换时重建窗口", s.customTitleBar) {
+                    ToggleRow(
+                        "自绘标题栏",
+                        "默认开。标题栏由应用画（JBR 负责拖拽 / 贴靠 / 边缘缩放与三大键），切换会重建窗口",
+                        s.customTitleBar,
+                    ) {
                         set(s.copy(customTitleBar = it))
+                        graph.rebuildWindow?.invoke()
                     }
                     ChoiceRow(
                         "语言 / Language",
@@ -446,7 +451,7 @@ fun SettingsCategoryScreen(
                             System.setProperty("java.io.tmpdir", picked)
                         }
                     }
-                    InfoRow("缓存说明", "图片与 Chromium 磁盘缓存。登录 Cookie 在 chromium-login，清空不会登出。")
+                    InfoRow("缓存说明", "图片缓存、Chromium HTTP 缓存，以及直连用的临时 Edge 配置（chromium-net / chromium-login）。Pixiv 登录在 session.json，清空缓存不会登出。")
                     TextFieldRow("FANBOXSESSID cookie", s.fanboxCookie) { set(s.copy(fanboxCookie = it)) }
                     ToggleRow("收藏镜像到本地库", "", s.bookmarkMirrorEnabled) { set(s.copy(bookmarkMirrorEnabled = it)) }
                     ToggleRow("启用图片磁盘缓存", "关闭后图片只进内存缓存，不写盘", s.diskCacheEnabled) {

@@ -54,6 +54,12 @@ class AppGraph {
     var sessionGeneration by mutableStateOf(0)
         private set
 
+    /**
+     * 重建窗口。窗口宿主（JBR 的非客户区 / FlatLaf 的窗口装饰）在建窗口时定死，
+     * 「自绘标题栏」这类设置改完只能换一个窗口 —— 由 `Main` 在启动时装上实现。
+     */
+    @Volatile var rebuildWindow: (() -> Unit)? = null
+
     @Volatile private var loginReturn: LoginReturnChannel? = null
     @Volatile private var loginSession: ChromiumSession? = null
 

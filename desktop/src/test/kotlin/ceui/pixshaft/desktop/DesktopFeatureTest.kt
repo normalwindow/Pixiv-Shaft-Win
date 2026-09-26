@@ -28,15 +28,6 @@ class DesktopFeatureTest {
     }
 
     @Test
-    fun coversDisplayDetectsMaximizedButNotHalfSnap() {
-        val work = Rectangle(0, 0, 1920, 1040)
-        val screen = Rectangle(0, 0, 1920, 1080)
-        assertTrue(WinNative.coversDisplay(Rectangle(0, 0, 1920, 1040), work, screen))
-        assertTrue(WinNative.coversDisplay(Rectangle(1, 0, 1919, 1080), work, screen))
-        assertTrue(!WinNative.coversDisplay(Rectangle(0, 0, 960, 1040), work, screen))
-    }
-
-    @Test
     fun horizontalWheelBoostsTinyNotches() {
         assertEquals(-96f, horizontalWheelPixels(0f, -1f), 0.01f)
         assertEquals(192f, horizontalWheelPixels(2f, 0f), 0.01f)
@@ -86,32 +77,6 @@ class DesktopFeatureTest {
     }
 
     @Test
-    fun windowChromeHopsBetweenMaximizeAndFullscreen() {
-        val max = androidx.compose.ui.window.WindowPlacement.Maximized
-        val full = androidx.compose.ui.window.WindowPlacement.Fullscreen
-        val float = androidx.compose.ui.window.WindowPlacement.Floating
-        assertTrue(WindowChrome.hopRequired(max, full))
-        assertTrue(WindowChrome.hopRequired(full, max))
-        assertTrue(!WindowChrome.hopRequired(float, full))
-        assertTrue(!WindowChrome.hopRequired(max, float))
-    }
-
-    @Test
-    fun overscanOnlyCountsPixelsPastTheWorkArea() {
-        val work = Rectangle(0, 0, 1920, 1040)
-        val over = WindowChrome.overscan(Rectangle(-8, -8, 1936, 1056), work)
-        assertEquals(8, over.top)
-        assertEquals(8, over.left)
-        assertEquals(8, over.right)
-        assertEquals(8, over.bottom)
-        val none = WindowChrome.overscan(Rectangle(100, 100, 800, 600), work)
-        assertEquals(0, none.top + none.left + none.right + none.bottom)
-        val taskbar = WindowChrome.overscan(Rectangle(0, 0, 1920, 1080), work)
-        assertEquals(12, taskbar.bottom)
-        assertTrue(taskbar.bottom < 40)
-    }
-
-    @Test
     fun webAuthInstallerParsesReleaseAsset() {
         val json = "{" + "\"assets\":[{\"name\":\"PixShaftWebAuth.exe\",\"browser_download_url\":\"https://example/PixShaftWebAuth.exe\"}]" + "}"
         assertEquals("https://example/PixShaftWebAuth.exe", WebAuthInstaller.parseAssetUrl(json))
@@ -122,5 +87,18 @@ class DesktopFeatureTest {
         assertEquals("https://example/pre.exe", WebAuthInstaller.parseAssetUrl(listJson))
         val msg = WebAuthInstaller.humanize(listOf("direct: HTTP 404 https://github.com/x"))
         assertTrue(msg.contains("PixShaftWebAuth.exe"))
+        assertTrue(WebAuthInstaller.releasePageUrl().endsWith("/releases"))
+        val missing = java.nio.file.Path.of("C:\\definitely-not-pixshaft-webauth.exe")
+        val missingErr = runCatching { WebAuthInstaller.installFromFile(missing) }.exceptionOrNull()
+        assertTrue(missingErr is java.io.IOException)
+        val tiny = java.nio.file.Files.createTempFile("webauth-tiny", ".exe")
+        try {
+            java.nio.file.Files.writeString(tiny, "nope")
+            val tinyErr = runCatching { WebAuthInstaller.installFromFile(tiny) }.exceptionOrNull()
+            assertTrue(tinyErr is java.io.IOException)
+            assertTrue(tinyErr!!.message!!.contains("太小"))
+        } finally {
+            java.nio.file.Files.deleteIfExists(tiny)
+        }
     }
 }

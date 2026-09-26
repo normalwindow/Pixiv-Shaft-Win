@@ -3,10 +3,14 @@ package ceui.pixshaft.desktop
 import com.google.gson.JsonParser
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.awt.Desktop
 import java.io.IOException
+import java.net.URI
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.concurrent.TimeUnit
+import javax.swing.JFileChooser
+import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
  * PixShaftWebAuth.exe is published as its own GitHub Release asset, not packed
@@ -21,6 +25,42 @@ object WebAuthInstaller {
 
     fun fallbackUrl(): String =
         AppVersion.GITHUB_URL + "/releases/latest/download/" + FILE_NAME
+
+    fun releasePageUrl(): String = AppVersion.GITHUB_URL + "/releases"
+
+    fun openReleasePage() {
+        Desktop.getDesktop().browse(URI(releasePageUrl()))
+    }
+
+    fun openInstallFolder() {
+        val dir = managedPath.parent
+        Files.createDirectories(dir)
+        Desktop.getDesktop().open(dir.toFile())
+    }
+
+    fun pickExe(): Path? {
+        val chooser = JFileChooser()
+        chooser.dialogTitle = FILE_NAME
+        chooser.fileFilter = FileNameExtensionFilter(FILE_NAME, "exe")
+        chooser.isAcceptAllFileFilterUsed = true
+        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return null
+        return chooser.selectedFile?.toPath()
+    }
+
+    fun installFromFile(source: Path): Path {
+        if (!Files.isRegularFile(source)) {
+            throw IOException("不是文件：" + source)
+        }
+        val size = Files.size(source)
+        if (size < 1024L * 1024L) {
+            throw IOException("文件太小（" + size + " 字节），不像 " + FILE_NAME)
+        }
+        val dest = managedPath
+        Files.createDirectories(dest.parent)
+        Files.copy(source, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+        dest.toFile().setExecutable(true)
+        return dest
+    }
 
     fun parseAssetUrl(releaseJson: String): String? {
         val parsed = runCatching { JsonParser.parseString(releaseJson) }.getOrNull() ?: return null
@@ -115,11 +155,7 @@ object WebAuthInstaller {
             cwd.resolve("build").resolve("webauth").resolve(FILE_NAME),
         )
         val src = candidates.firstOrNull { Files.isRegularFile(it) } ?: return null
-        val dest = managedPath
-        Files.createDirectories(dest.parent)
-        Files.copy(src, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
-        dest.toFile().setExecutable(true)
-        return dest
+        return installFromFile(src)
     }
 
     private fun downloadWith(client: OkHttpClient, onProgress: (Long, Long) -> Unit): Path {

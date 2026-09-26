@@ -35,17 +35,21 @@ fun shaftAccent(index: Int): Color = when (index) {
     else -> Color(0xFF3D7EFF)
 }
 
+/** 主题模式：0 跟随系统 / 1 浅色 / 2 深色。窗口装饰（JBR 三大键、标题栏底色）也要问同一个答案。 */
+@Composable
+fun isShaftDark(themeMode: Int): Boolean = when (themeMode) {
+    1 -> false
+    2 -> true
+    else -> isSystemInDarkTheme()
+}
+
 @Composable
 fun ShaftTheme(
     themeMode: Int = 0,
     accentIndex: Int = 0,
     content: @Composable () -> Unit,
 ) {
-    val dark = when (themeMode) {
-        1 -> false
-        2 -> true
-        else -> isSystemInDarkTheme()
-    }
+    val dark = isShaftDark(themeMode)
     val accent = shaftAccent(accentIndex)
     val scheme = if (dark) {
         darkColorScheme(

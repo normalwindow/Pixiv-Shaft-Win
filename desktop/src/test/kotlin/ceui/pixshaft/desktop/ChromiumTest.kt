@@ -96,10 +96,15 @@ class ChromiumTest {
         )
         assertTrue(args.contains("--headless=new"))
         assertFalse(args.any { it == "--headless" })
+        assertFalse(args.contains("--disable-gpu"))
         assertTrue(args.contains("--remote-debugging-port=0"))
         assertTrue(args.contains("--remote-debugging-address=127.0.0.1"))
         assertTrue(args.contains("--edge-skip-compat-layer-relaunch"))
         assertTrue(args.contains("--no-proxy-server"))
+        assertTrue(args.contains("--disable-component-update"))
+        assertTrue(args.contains("--metrics-recording-only"))
+        assertTrue(args.contains("--disk-cache-size=67108864"))
+        assertTrue(args.any { it.contains("EdgeWallet") })
         assertTrue(args.any { it.startsWith("--origin-to-force-quic-on=") })
         val chrome = Chromium.browserLaunchArgs(
             browser = java.nio.file.Path.of("C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"),
@@ -134,6 +139,42 @@ class ChromiumTest {
             ) == 14936,
         )
         assertTrue(Chromium.parseDevToolsListeningPort("nope") == null)
+        assertEquals(
+            "ws://127.0.0.1:14936/devtools/browser/abc",
+            Chromium.parseBrowserWebSocket(14936, "14936\n/devtools/browser/abc"),
+        )
+        assertEquals(
+            "ws://127.0.0.1:14936/devtools/browser/43ad8e6f",
+            Chromium.parseDevToolsListeningWebSocket(
+                "DevTools listening on ws://127.0.0.1:14936/devtools/browser/43ad8e6f",
+            ),
+        )
+        assertTrue(Chromium.cdpUsesBrowserSession("Target.attachToTarget"))
+        assertTrue(Chromium.cdpUsesBrowserSession("Browser.getVersion"))
+        assertTrue(!Chromium.cdpUsesBrowserSession("Runtime.enable"))
+        val listJson = """
+            [
+              {"id":"ext","type":"background_page","url":"chrome-extension://x/y"},
+              {"id":"blank","type":"page","url":"about:blank"}
+            ]
+        """.trimIndent()
+        assertEquals("blank", Chromium.pickPageTargetId(listJson))
+        val zombie = com.google.gson.JsonParser.parseString(
+            """{"targetId":"z","type":"page","url":"","pid":0}""",
+        ).asJsonObject
+        val createdBlank = com.google.gson.JsonParser.parseString(
+            """{"targetId":"c","type":"page","url":"about:blank","pid":0}""",
+        ).asJsonObject
+        val live = com.google.gson.JsonParser.parseString(
+            """{"targetId":"l","type":"page","url":"about:blank","pid":20376}""",
+        ).asJsonObject
+        assertTrue(!Chromium.isLivePageTarget(zombie))
+        assertTrue(Chromium.isLivePageTarget(createdBlank))
+        assertTrue(Chromium.isLivePageTarget(live))
+        val auto = Chromium.autoAttachParams()
+        assertTrue(auto.get("flatten").asBoolean)
+        assertEquals("page", auto.getAsJsonArray("filter")[0].asJsonObject.get("type").asString)
+        assertTrue(Chromium.autoAttachParams(pageOnly = false).get("filter") == null)
     }
 
     @Test
@@ -269,5 +310,60 @@ class ChromiumTest {
         )
         assertTrue(Chromium.isCdpTargetDead(nested))
         assertFalse(Chromium.isCdpTargetDead(IOException("CDP WebSocket 连接超时")))
+    }
+
+    @Test
+    fun pruneProfileJunkDropsEdgeComponentsAndKeepsCookies() {
+        val root = java.nio.file.Files.createTempDirectory("pixshaft-profile-")
+        try {
+            val cookies = root.resolve("Default").resolve("Cookies")
+            java.nio.file.Files.createDirectories(cookies.parent)
+            java.nio.file.Files.writeString(cookies, "keep")
+            java.nio.file.Files.createDirectories(root.resolve("component_crx_cache"))
+            java.nio.file.Files.createDirectories(root.resolve("ProvenanceData"))
+            java.nio.file.Files.createDirectories(root.resolve("Edge Wallet"))
+            java.nio.file.Files.writeString(root.resolve("BrowserMetrics-spare.pma"), "x")
+            Chromium.pruneProfileJunk(root)
+            assertTrue(java.nio.file.Files.isRegularFile(cookies))
+            assertTrue(!java.nio.file.Files.exists(root.resolve("component_crx_cache")))
+            assertTrue(!java.nio.file.Files.exists(root.resolve("ProvenanceData")))
+            assertTrue(!java.nio.file.Files.exists(root.resolve("Edge Wallet")))
+            assertTrue(!java.nio.file.Files.exists(root.resolve("BrowserMetrics-spare.pma")))
+        } finally {
+            AppPaths.deleteQuietly(root)
+        }
+    }
+
+    @Test
+    fun chromiumHelperProfilesLiveUnderCacheRoot() {
+        val cache = AppPaths.cacheRoot()
+        assertTrue(AppPaths.chromiumNetDir().startsWith(cache))
+        assertTrue(AppPaths.chromiumLoginDir().startsWith(cache))
+        assertEquals("chromium-net", AppPaths.chromiumNetDir().fileName.toString())
+        assertEquals("chromium-login", AppPaths.chromiumLoginDir().fileName.toString())
+    }
+
+    @Test
+    fun newProfileDirIsUniqueChild() {
+        val parent = java.nio.file.Files.createTempDirectory("pixshaft-net-")
+        try {
+            val a = Chromium.newProfileDir(parent)
+            val b = Chromium.newProfileDir(parent)
+            assertTrue(a.startsWith(parent))
+            assertTrue(b.startsWith(parent))
+            assertTrue(a.fileName.toString().startsWith("s-"))
+            assertTrue(a != b)
+            assertTrue(java.nio.file.Files.isDirectory(a))
+        } finally {
+            AppPaths.deleteQuietly(parent)
+        }
+    }
+
+    @Test
+    fun deadWithoutDevToolsWaitsForGraceThenGivesUp() {
+        assertTrue(!Chromium.deadWithoutDevTools(processAlive = true, boundPort = 0, iteration = 99))
+        assertTrue(!Chromium.deadWithoutDevTools(processAlive = false, boundPort = 9222, iteration = 99))
+        assertTrue(!Chromium.deadWithoutDevTools(processAlive = false, boundPort = 0, iteration = 3))
+        assertTrue(Chromium.deadWithoutDevTools(processAlive = false, boundPort = 0, iteration = 8))
     }
 }

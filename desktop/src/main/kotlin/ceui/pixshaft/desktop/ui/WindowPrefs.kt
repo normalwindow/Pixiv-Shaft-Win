@@ -1,11 +1,10 @@
 package ceui.pixshaft.desktop.ui
 
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import ceui.pixshaft.desktop.AppPaths
 import com.google.gson.Gson
 import java.nio.file.Files
 
+/** 窗口尺寸偏好（`%APPDATA%\PixShaft\window.json`）。位置不存：启动时居中，切换形态重建时沿用。 */
 data class WindowSizePrefs(
     var width: Float = 1200f,
     var height: Float = 760f,
@@ -23,16 +22,4 @@ data class WindowSizePrefs(
         Files.createDirectories(AppPaths.windowFile.parent)
         Files.writeString(AppPaths.windowFile, Gson().toJson(this))
     }
-}
-
-@Composable
-fun rememberWindowPrefs(): WindowSizePrefs = remember {
-    runCatching {
-        if (Files.exists(AppPaths.windowFile)) {
-            Gson().fromJson(Files.readString(AppPaths.windowFile), WindowSizePrefs::class.java)
-                ?: WindowSizePrefs()
-        } else {
-            WindowSizePrefs()
-        }
-    }.getOrDefault(WindowSizePrefs()).clamp()
 }
