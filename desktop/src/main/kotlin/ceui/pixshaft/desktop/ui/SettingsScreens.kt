@@ -120,7 +120,7 @@ fun SettingsHubScreen(onOpenCategory: (String) -> Unit) {
         OutlinedTextField(
             value = query,
             onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().trackTextInputHover(),
             singleLine = true,
             label = { Text("搜索设置项") },
             shape = RoundedCornerShape(16.dp),
@@ -300,6 +300,20 @@ fun SettingsCategoryScreen(
                     }
                 }
                 SettingsGroup("鼠标") {
+                    ToggleRow(
+                        "滚轮方向反转",
+                        "滚轮往下 = 内容往下（自然滚动 / 触控板习惯）。默认关闭：往下滚 = 内容往下翻。",
+                        s.invertWheelScroll,
+                    ) {
+                        set(s.copy(invertWheelScroll = it))
+                    }
+                    ToggleRow(
+                        "横向条滚轮方向反转",
+                        "排行榜 / 搜索筛选那一排 chip 的横向滚动方向",
+                        s.invertHorizontalWheel,
+                    ) {
+                        set(s.copy(invertHorizontalWheel = it))
+                    }
                     ToggleRow(
                         "详情页右键返回",
                         "在插画详情页按鼠标右键回到上一页；鼠标停在评论输入框上时让位给右键粘贴。",
@@ -593,7 +607,7 @@ private fun TextFieldRow(title: String, value: String, onChange: (String) -> Uni
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).trackTextInputHover(),
         label = { Text(title) },
         singleLine = true,
         shape = RoundedCornerShape(14.dp),

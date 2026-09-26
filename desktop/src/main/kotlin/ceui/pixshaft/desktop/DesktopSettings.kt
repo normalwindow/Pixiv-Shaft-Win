@@ -73,6 +73,8 @@ data class DesktopSettings(
     val backOnRightClick: Boolean = true, // 详情页右键返回
     val backMouseButton: Int = 0, // 0 右键 1 中键 2 后侧键 3 前侧键
     val quickDownloadToast: Boolean = true, // 快捷下载后弹简易提示
+    val invertWheelScroll: Boolean = false, // 滚轮方向反转（自然滚动）
+    val invertHorizontalWheel: Boolean = false, // 横向 chip 行滚轮方向反转
     // 收藏
     val privateStar: Boolean = false,
     val privateFollow: Boolean = false,
@@ -174,6 +176,8 @@ class SettingsStore(private val gson: Gson = Gson()) {
             if (!text.contains("\"quickDownloadToast\"")) next = next.copy(quickDownloadToast = true)
             if (!text.contains("\"downloadMouseButton\"")) next = next.copy(downloadMouseButton = 1)
             if (!text.contains("\"backMouseButton\"")) next = next.copy(backMouseButton = 0)
+            if (!text.contains("\"invertWheelScroll\"")) next = next.copy(invertWheelScroll = false)
+            if (!text.contains("\"invertHorizontalWheel\"")) next = next.copy(invertHorizontalWheel = false)
             next
         }.getOrDefault(DesktopSettings())
     }

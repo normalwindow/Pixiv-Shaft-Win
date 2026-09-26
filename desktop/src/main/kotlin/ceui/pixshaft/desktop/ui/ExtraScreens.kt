@@ -605,7 +605,7 @@ fun ChatScreen(graph: AppGraph, onOpenIllust: (Long) -> Unit = {}, onOpenUser: (
             OutlinedTextField(
                 value = input,
                 onValueChange = { if (it.length <= 2048) input = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).trackTextInputHover(),
                 placeholder = { Text(if (status == "connected") "说点什么…" else "只读模式（hmac.key 或 SHAFT_EVENTS_HMAC）") },
                 maxLines = 3,
                 shape = RoundedCornerShape(14.dp),

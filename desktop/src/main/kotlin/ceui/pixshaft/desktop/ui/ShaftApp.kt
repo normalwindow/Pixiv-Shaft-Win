@@ -3,7 +3,9 @@ package ceui.pixshaft.desktop.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -242,6 +244,11 @@ private fun LoggedInShell(
     val preview = LocalImagePreview.current
     val fullscreen = windowState.placement == WindowPlacement.Fullscreen
     val pageStates = rememberSaveableStateHolder()
+    // 鼠标返回键：设置页 / 下载管理 / 个人页等所有二级页面共用（详情页自己另有一套，见 ArtworkScreen）
+    val settings = graph.settings.current
+    val backMouseButton = ShaftMouseButton.fromBackIndex(settings.backMouseButton)
+    // CompositionLocal 只在组合里取一次，lambda 里直接用这个引用（lambda 不是 @Composable）
+    val textInputHovered = LocalTextInputHovered.current
 
     // 侧栏 hover 捕获源。读取全部下沉到 ShaftRail / RailOverlay 内部：
     // hover 变化只重组侧栏组件，不会带着整个页面（瀑布流）一起重组 —— 修复内容闪烁。
@@ -327,7 +334,26 @@ private fun LoggedInShell(
     }
 
     Box(
-        Modifier.fillMaxSize().onPreviewKeyEvent { event ->
+        Modifier
+            .fillMaxSize()
+            // 鼠标返回键（默认右键）在**所有**二级页面上都生效：设置、下载管理、个人页…
+            // 不用每个页面自己接一遍。让位规则：
+            //   - 鼠标停在文本输入框上时让位给「右键粘贴」（LocalTextInputHovered）；
+            //   - 搜索浮层 / 抽屉 / 图片预览开着时让位（它们有自己的一层交互）。
+            // 已经自己处理过的页面（详情页）会先消费掉事件，这里靠 isConsumed 天然不重复触发。
+            .mouseButtonClick(
+                button = backMouseButton,
+                isEnabled = {
+                    settings.backOnRightClick &&
+                        backStack.size > 1 &&
+                        !searchOpen &&
+                        !drawerOpen &&
+                        preview.request == null &&
+                        !textInputHovered.value
+                },
+                onClick = { pop() },
+            )
+            .onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
             when {
                 preview.request != null -> {
@@ -507,6 +533,7 @@ private fun LoggedInShell(
                         .fillMaxWidth()
                         .padding(8.dp)
                         .focusRequester(searchFocus)
+                        .trackTextInputHover()
                         .onPreviewKeyEvent { event ->
                             if (event.type == KeyEventType.KeyDown && event.key == Key.Enter) {
                                 searchOpen = false
@@ -810,10 +837,13 @@ private fun HomePage(
 ) {
     var type by rememberSaveable { mutableStateOf("illust") }
     val batch = remember { BatchSelection() }
+    // 滚起来之后把「插画 / 漫画」那一行收掉，给瀑布流让地方；回到顶部再出来
+    var scrolled by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         FeedActionRow(
             graph = graph,
             batch = batch,
+            compact = scrolled,
             onRefresh = { graph.feedStore.refresh("home:$type") },
             leading = {
                 Surface(
@@ -858,15 +888,25 @@ private fun HomePage(
             gridKey = type,
             batch = batch,
             showToolbar = false,
+            onScrolledChange = { scrolled = it },
             header = {
-                Row(Modifier.padding(4.dp)) {
-                    listOf("illust" to "插画", "manga" to "漫画").forEach { (id, label) ->
-                        FilterChip(
-                            selected = type == id,
-                            onClick = { type = id },
-                            label = { Text(label) },
-                            modifier = Modifier.padding(end = 8.dp),
-                        )
+                // 滚动时整行收掉（高度动画），回顶部再展开。
+                // 必须用「无作用域」那个 AnimatedVisibility：header 是普通 @Composable 槽位，
+                // 而 ColumnScope 重载的隐式接收者来自外层 Column，在这里用不了会直接报错。
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = !scrolled,
+                    enter = expandVertically(tween(140)) + fadeIn(tween(140)),
+                    exit = shrinkVertically(tween(140)) + fadeOut(tween(140)),
+                ) {
+                    Row(Modifier.padding(4.dp)) {
+                        listOf("illust" to "插画", "manga" to "漫画").forEach { (id, label) ->
+                            FilterChip(
+                                selected = type == id,
+                                onClick = { type = id },
+                                label = { Text(label) },
+                                modifier = Modifier.padding(end = 8.dp),
+                            )
+                        }
                     }
                 }
             },
@@ -1780,6 +1820,7 @@ internal fun SimpleFeedPage(
     batch: BatchSelection? = null,
     showToolbar: Boolean = true,
     feature: FeatureColumn? = null,
+    onScrolledChange: ((Boolean) -> Unit)? = null,
 ) {
     val feed = cacheKey?.let { graph.feedStore.get(it) } ?: remember(key) { FeedState() }
     val items = feed.items.orEmpty()
@@ -1845,6 +1886,7 @@ internal fun SimpleFeedPage(
             },
             onDownload = { graph.queue.enqueue(it) },
             onRetry = { feed.reset() },
+            onScrolledChange = onScrolledChange,
             onLoadMore = {
                 val url = feed.next ?: return@IllustWaterfall
                 if (feed.loadingMore) return@IllustWaterfall

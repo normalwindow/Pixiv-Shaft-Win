@@ -50,16 +50,19 @@ fun HorizontalWheelRow(
     content: @Composable RowScope.() -> Unit,
 ) {
     val scroll = rememberScrollState()
+    // 设置里可以反转滚轮方向
+    val invert = LocalDesktopSettings.current.invertHorizontalWheel
     Row(
         modifier
             .horizontalScroll(scroll, reverseScrolling = reverseScroll)
-            .pointerInput(Unit) {
+            .pointerInput(invert) {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
                         if (event.type == PointerEventType.Scroll) {
                             val change = event.changes.firstOrNull() ?: continue
-                            val pixels = horizontalWheelPixels(change.scrollDelta.x, change.scrollDelta.y)
+                            val raw = horizontalWheelPixels(change.scrollDelta.x, change.scrollDelta.y)
+                            val pixels = if (invert) -raw else raw
                             if (pixels != 0f) {
                                 scroll.dispatchRawDelta(pixels)
                                 event.changes.forEach { it.consume() }
